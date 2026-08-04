@@ -198,11 +198,19 @@ syntax "no_claim" : citesRelation
 ```
 
 `relation` is mandatory; there is no safe default. `frontier` and `note` are
-optional and default to empty. -/
+optional, independently, and in either presence combination.
+
+The `atomic(...)` wrappers are load-bearing, not decoration. Both optional
+groups open with `(`, so without them the parser commits to `frontier` on
+seeing the paren and then fails with *"unexpected identifier; expected
+'frontier'"* on `(note := ...)` alone — making a note impossible without a
+frontier. That is the common case, since `mfc lint` rule `E-06` requires a note
+exactly when `relation := no_claim`, which usually has no frontier. `atomic`
+lets the parser backtrack out of the frontier group and try the note group. -/
 syntax (name := citesAttr)
   "cites" str "(" &"relation" ":=" citesRelation ")"
-    ("(" &"frontier" ":=" "[" str,* "]" ")")?
-    ("(" &"note" ":=" str ")")? : attr
+    (atomic("(" &"frontier" ":=") "[" str,* "]" ")")?
+    (atomic("(" &"note" ":=") str ")")? : attr
 
 private def parseRelation (stx : Syntax) : CoreM Relation := do
   match stx with

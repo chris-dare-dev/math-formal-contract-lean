@@ -28,7 +28,8 @@ to serve this directory, the named exception in the consuming repo's
 | `mfc/lint.py` | the banned-property lint |
 | `mfc/validate.py` | artifact validation |
 | `mfc/bundle.py` | `declarations.json`, everything recomputed |
-| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle` |
+| `mfc/rules.py` | the E-01..E-10 content rules |
+| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint` |
 | `pyproject.toml` | packaging, so a consumer can install it |
 | `testdata/schemas/invalid/` | schemas that must fail the lint |
 | `testdata/artifacts/valid/` | one filled instance per schema |
@@ -104,6 +105,41 @@ Two placement notes, both deliberate:
   stable, greppable path for any non-Python consumer.
 
 Neither adds a Lake dependency, so the zero-dependency invariant is untouched.
+
+## `lint`: a rule that did not run is not a rule that passed
+
+Schema validation says an artifact is well *formed*. The E-rules say whether
+what it contains is *allowed* — a perfectly well-formed emission can still
+launder a `sorry`, declare an undeclared axiom, or cite a key that does not
+exist.
+
+Two rules cannot run yet. `E-04` needs the statement registry, which is gated
+on the open size-ceiling decision, and `E-09` needs the topic's `closed_lanes`
+configuration. They report **`not_run`**, never `pass`, and every invocation
+prints which rules did not run instead of folding them into a count:
+
+```
+7 passed, 0 failed, 3 not_run
+note: E-04, E-05, E-09 did NOT run. This is not a pass -- nothing checked
+      what they check.
+```
+
+That is the trust-axis rule applied one level down. A green lint with
+`E-04: not_run` must not be readable as "the citations resolve". `--require-all`
+turns any `not_run` into a failure, for the day the inputs exist.
+
+`E-05` shows the other half of the idea: its emission half (a citation claiming
+`exact` while carrying its own open frontier) runs now and *fails* now; only
+the registry half is deferred. A missing input suppresses exactly what it must
+and no more.
+
+Every rule has a fixture in `testdata/emissions/invalid/` that must trip it.
+
+**`E-07` earns its keep twice.** It was written so two different statements
+cannot hash identically. It also turns out to select exactly the statements
+that cannot be re-elaborated — measured at 339/339 round-trip on elision-free
+statements and 0/61 on elided ones — so it is already the precondition
+`--restate-check` needs.
 
 ## `bundle` recomputes; it does not carry anything across
 

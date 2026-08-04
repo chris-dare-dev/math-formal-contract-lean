@@ -30,7 +30,7 @@
   "constants": [
     {
       "value_pp": "0",
-      "type_pp": "Nat",
+      "type_pp": "forall (C : Type u) [inst : Cat C], ⋯",
       "scc_members": [],
       "range": {
         "startLine": 112,
@@ -86,5 +86,6 @@
       ],
       "axioms": []
     }
-  ]
+  ],
+  "$comment_fixture": "E-07: an elided type_pp. Two different statements can hash identically, and it cannot be re-elaborated."
 }

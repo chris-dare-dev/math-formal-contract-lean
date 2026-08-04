@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .bundle import BundleError, build_declarations, dumps
 from .lint import FORBIDDEN_PROPERTY_NAMES, lint_schema
+from .rules import Status, check, summarize
 from .validate import (
     LoadError,
     SCHEMA_DIR,
@@ -250,6 +251,54 @@ def cmd_bundle(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_lint(args: argparse.Namespace) -> int:
+    emission_path, env_path = Path(args.emission), Path(args.environment)
+    for p in (emission_path, env_path):
+        if not p.is_file():
+            print(f"error: no such file: {p}", file=sys.stderr)
+            return EXIT_USAGE
+    try:
+        emission = load_artifact(emission_path)
+        environment = load_artifact(env_path)
+        registry = load_artifact(Path(args.registry)) if args.registry else None
+        lanes_doc = load_artifact(Path(args.closed_lanes)) if args.closed_lanes else None
+    except (LoadError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    for doc, want, label in ((emission, "emission/1.0", emission_path.name),
+                             (environment, "environment/1.0", env_path.name)):
+        rc = _validate_against(doc, want, label)
+        if rc is not None:
+            return rc
+
+    closed_lanes = lanes_doc.get("closed_lanes") if isinstance(lanes_doc, dict) else None
+    results = check(emission, environment, registry=registry, closed_lanes=closed_lanes)
+
+    for r in results:
+        mark = {Status.PASS: "ok", Status.FAIL: "FAIL", Status.NOT_RUN: "not_run"}[r.status]
+        print(f"{mark:>7}  {r.rule}  {r.title}")
+        for f in r.findings:
+            print(f"         {f.where}: {f.detail}", file=sys.stderr)
+        if r.reason:
+            print(f"         ({r.reason})")
+
+    passed, failed, not_run = summarize(results)
+    print(f"\n{passed} passed, {failed} failed, {not_run} not_run")
+
+    if not_run:
+        # Printed every time, never folded into a count. A green lint with a
+        # not_run rule must not be readable as if that rule had passed.
+        names = ", ".join(r.rule for r in results if r.status is Status.NOT_RUN)
+        print(f"note: {names} did NOT run. This is not a pass -- nothing checked "
+              f"what they check.", file=sys.stderr)
+        if args.require_all:
+            print("error: --require-all and at least one rule did not run",
+                  file=sys.stderr)
+            return EXIT_FINDINGS
+    return EXIT_FINDINGS if failed else EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfc",
@@ -289,6 +338,22 @@ def build_parser() -> argparse.ArgumentParser:
     bun.add_argument("--environment", required=True, help="path to environment.json")
     bun.add_argument("--out", required=True, help="where to write declarations.json")
     bun.set_defaults(func=cmd_bundle)
+
+    lnt = sub.add_parser(
+        "lint",
+        help="run the E-01..E-10 content rules over an emission",
+        description="Schema validation says an artifact is well FORMED; these "
+                    "rules say whether what it contains is ALLOWED. A rule "
+                    "whose input is missing reports not_run, never pass.",
+    )
+    lnt.add_argument("--emission", required=True)
+    lnt.add_argument("--environment", required=True)
+    lnt.add_argument("--registry", help="enables E-04 and the registry half of E-05")
+    lnt.add_argument("--closed-lanes", dest="closed_lanes",
+                     help="JSON with a closed_lanes[] array; enables E-09")
+    lnt.add_argument("--require-all", dest="require_all", action="store_true",
+                     help="treat any not_run rule as a failure")
+    lnt.set_defaults(func=cmd_lint)
 
     return parser
 

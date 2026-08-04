@@ -1,0 +1,11 @@
+{
+  "$comment": "The consuming repo's closed lanes, as CLAUDE.md sections 3 and 4 describe them. Supplying this to `mfc lint` turns 'the geometric lane is closed' from a paragraph into a build failure.",
+  "closed_lanes": [
+    {
+      "name": "geometry",
+      "forbidden_module_prefixes": ["Mathlib.AlgebraicGeometry.", "Mathlib.CategoryTheory.Sites."],
+      "forbidden_constants": ["CategoryTheory.Sheaf"],
+      "note": "D^b(Coh X), Serre duality, Chern characters, HRR, numerical Grothendieck groups of varieties, SODs, Fourier-Mukai. None exist in Mathlib at the pinned commit. A reachable prefix here means someone started the multi-year program by accident."
+    }
+  ]
+}

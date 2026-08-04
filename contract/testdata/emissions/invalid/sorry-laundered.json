@@ -55,7 +55,9 @@
           "frontier": []
         }
       ],
-      "axioms": []
+      "axioms": [
+        "sorryAx"
+      ]
     },
     {
       "value_pp": null,
@@ -86,5 +88,6 @@
       ],
       "axioms": []
     }
-  ]
+  ],
+  "$comment_fixture": "E-01: an axiom closure containing sorryAx."
 }

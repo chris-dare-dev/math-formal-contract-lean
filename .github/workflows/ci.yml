@@ -138,6 +138,15 @@ jobs:
             --out attest/declarations.json
           mfc validate attest/declarations.json
 
+          # The E-rules over the REAL emission, with closed lanes supplied so
+          # E-09 actually runs. --require-all is deliberately NOT passed: E-04
+          # cannot run until the registry exists, and the run prints which
+          # rules did not run rather than hiding them in a count.
+          mfc lint \
+            --emission attest/lean-emission.json \
+            --environment contract/testdata/artifacts/valid/environment-1.0.json \
+            --closed-lanes contract/testdata/closed-lanes.json
+
       - name: the emission is not vacuous
         run: |
           set -euo pipefail

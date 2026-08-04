@@ -49,10 +49,10 @@
       "is_instance": false,
       "cites": [
         {
+          "key": "stmt:9f4c1a20b7d3:x",
           "relation_claimed": "no_claim",
-          "note": "Fixture proving the attribute lands on a def, not only a theorem.",
-          "key": "stmt:9f4c1a20b7d3:test.ondef",
-          "frontier": []
+          "frontier": [],
+          "note": null
         }
       ],
       "axioms": []
@@ -86,5 +86,6 @@
       ],
       "axioms": []
     }
-  ]
+  ],
+  "$comment_fixture": "E-06: no_claim with no note -- related, but it does not say how."
 }

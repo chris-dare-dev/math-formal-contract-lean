@@ -96,7 +96,11 @@ theorem tagged_equivalent : True := trivial
 @[cites "stmt:9f4c1a20b7d3:test.specialization" (relation := specialization)]
 theorem tagged_specialization : True := trivial
 
-@[cites "stmt:9f4c1a20b7d3:test.noclaim" (relation := no_claim)]
+-- `no_claim` carries a note, because `mfc lint` rule E-06 requires one and
+-- this repo's own emission must pass its own lint. Saying two statements are
+-- related without saying how is unreadable, which is the point of the rule.
+@[cites "stmt:9f4c1a20b7d3:test.noclaim" (relation := no_claim)
+        (note := "Fixture for the no_claim spelling; no implication is claimed.")]
 theorem tagged_no_claim : True := trivial
 
 /-- One declaration may cite more than one statement. Note these are two
@@ -106,7 +110,8 @@ entries in **one** attribute list — `@[a] @[b] theorem` is not valid Lean. -/
 theorem tagged_twice : True := trivial
 
 /-- The attribute is not restricted to theorems. -/
-@[cites "stmt:9f4c1a20b7d3:test.ondef" (relation := no_claim)]
+@[cites "stmt:9f4c1a20b7d3:test.ondef" (relation := no_claim)
+        (note := "Fixture proving the attribute lands on a def, not only a theorem.")]
 def taggedDef : Nat := 0
 
 /-! ## What landed in the extension

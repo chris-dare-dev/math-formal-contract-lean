@@ -49,10 +49,12 @@
       "is_instance": false,
       "cites": [
         {
-          "relation_claimed": "no_claim",
-          "note": "Fixture proving the attribute lands on a def, not only a theorem.",
-          "key": "stmt:9f4c1a20b7d3:test.ondef",
-          "frontier": []
+          "key": "stmt:9f4c1a20b7d3:x",
+          "relation_claimed": "exact",
+          "frontier": [
+            "still-open"
+          ],
+          "note": null
         }
       ],
       "axioms": []
@@ -86,5 +88,6 @@
       ],
       "axioms": []
     }
-  ]
+  ],
+  "$comment_fixture": "E-05: relation_claimed=exact carrying an open frontier."
 }

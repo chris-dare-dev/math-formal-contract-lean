@@ -55,7 +55,10 @@
           "frontier": []
         }
       ],
-      "axioms": []
+      "axioms": [
+        "propext",
+        "Classical.choice"
+      ]
     },
     {
       "value_pp": null,
@@ -86,5 +89,6 @@
       ],
       "axioms": []
     }
-  ]
+  ],
+  "$comment_fixture": "E-10: an unsorted axioms array -- breaks byte-reproducibility."
 }

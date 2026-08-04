@@ -29,7 +29,7 @@
   },
   "constants": [
     {
-      "value_pp": "0",
+      "value_pp": null,
       "type_pp": "Nat",
       "scc_members": [],
       "range": {
@@ -42,7 +42,7 @@
       "name": "MathFormalContractTest.taggedDef",
       "module": "MathFormalContractTest",
       "local_deps": [],
-      "kind": "def",
+      "kind": "axiom",
       "is_reducible": false,
       "is_private": false,
       "is_internal": false,
@@ -86,5 +86,6 @@
       ],
       "axioms": []
     }
-  ]
+  ],
+  "$comment_fixture": "E-02: a locally declared axiom absent from axiom_policy.additions."
 }

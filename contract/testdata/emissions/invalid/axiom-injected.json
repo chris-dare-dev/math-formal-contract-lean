@@ -55,7 +55,9 @@
           "frontier": []
         }
       ],
-      "axioms": []
+      "axioms": [
+        "Lean.ofReduceBool"
+      ]
     },
     {
       "value_pp": null,
@@ -86,5 +88,6 @@
       ],
       "axioms": []
     }
-  ]
+  ],
+  "$comment_fixture": "E-03: an axiom outside the declared policy."
 }
