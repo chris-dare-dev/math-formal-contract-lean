@@ -178,8 +178,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: install test deps
-        run: python -m pip install --quiet pytest jsonschema
+      # Install the package rather than running it from the tree. ADR-0009
+      # makes `mfc` a SHARED tool, so what CI must prove is that a CONSUMER
+      # can install and run it -- including that the schemas ship inside the
+      # wheel. Running `python -m` from the source tree proves neither.
+      - name: install mfc
+        run: python -m pip install --quiet './contract[yaml,test]'
 
       # The schemas must themselves be valid 2020-12 schemas. A schema that
       # does not compile validates nothing, and would otherwise pass silently.
@@ -187,7 +191,7 @@ jobs:
         run: |
           python - <<'PY'
           import json, pathlib, sys, jsonschema
-          paths = sorted(pathlib.Path("contract/schema").glob("*.schema.json"))
+          paths = sorted(pathlib.Path("contract/mfc/schema").glob("*.schema.json"))
           if not paths:
               print("::error::no schemas found -- an empty sweep is not a pass")
               sys.exit(1)
@@ -197,15 +201,17 @@ jobs:
           PY
 
       # Turns arXMCP CLAUDE.md 4.9 from a review habit into a build failure.
-      - name: mfc lint-schemas
-        run: python -m contract.mfc.cli lint-schemas
+      # The installed entry point, from a directory that is not the source
+      # tree -- this is what catches schemas that failed to ship in the wheel.
+      - name: mfc lint-schemas (installed)
+        run: cd "$RUNNER_TEMP" && mfc lint-schemas
 
       # The lint must FIRE, not merely pass. A gate with no failing case is not
       # evidence, so the rejection fixtures are asserted to be rejected.
       - name: rejection fixtures are rejected
         run: |
           set +e
-          python -m contract.mfc.cli lint-schemas --schema-dir contract/testdata/schemas/invalid
+          mfc lint-schemas --schema-dir contract/testdata/schemas/invalid
           code=$?
           set -e
           if [ "$code" -ne 1 ]; then
@@ -220,6 +226,33 @@ jobs:
       # instance" is the only check that the authoring did not drift -- and a
       # conditional that never fires is indistinguishable from one that is not
       # there.
+      # Every valid artifact must validate against the schema it DECLARES.
+      - name: mfc validate, over every filled instance
+        run: |
+          set -euo pipefail
+          for f in contract/testdata/artifacts/valid/*.json; do
+            mfc validate "$f"
+          done
+
+      # ...and every rejection fixture must FAIL, with exit 1 specifically.
+      # Exit 2 would mean the check did not run, which is not the same fact.
+      - name: rejection artifacts are rejected
+        run: |
+          set -euo pipefail
+          for f in contract/testdata/artifacts/invalid/*.json; do
+            python - "$f" <<'PY' > "$RUNNER_TEMP/probe.json"
+          import json, sys
+          d = json.load(open(sys.argv[1])); d.pop("$comment_fixture", None)
+          print(json.dumps(d))
+          PY
+            set +e; mfc validate "$RUNNER_TEMP/probe.json"; code=$?; set -e
+            if [ "$code" -ne 1 ]; then
+              echo "::error::$(basename "$f") must exit 1, got $code -- a cross-field rule is not firing"
+              exit 1
+            fi
+            echo "ok: $(basename "$f") rejected"
+          done
+
       - name: pytest
         run: python -m pytest contract/tests -q
 

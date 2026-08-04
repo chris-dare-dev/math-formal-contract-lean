@@ -16,7 +16,7 @@ from contract.mfc.cli import EXIT_FINDINGS, EXIT_OK, EXIT_USAGE, main
 from contract.mfc.lint import FORBIDDEN_PROPERTY_NAMES, lint_schema
 
 HERE = Path(__file__).resolve().parent
-SCHEMA_DIR = HERE.parent / "schema"
+SCHEMA_DIR = HERE.parent / "mfc" / "schema"
 INVALID_DIR = HERE.parent / "testdata" / "schemas" / "invalid"
 
 

@@ -1,3 +1,18 @@
+Metadata-Version: 2.4
+Name: mfc
+Version: 0.1.0
+Summary: Schemas and tooling for the math-formalization contract
+Author: Chris Dare
+License: MIT
+Keywords: lean,formalization,provenance,json-schema
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: jsonschema>=4.18
+Provides-Extra: yaml
+Requires-Dist: PyYAML>=6; extra == "yaml"
+Provides-Extra: test
+Requires-Dist: pytest>=7; extra == "test"
+
 # `contract/` — the schemas, and the tooling that polices them
 
 The machine-readable half of the contract between a corpus of papers and a Lean

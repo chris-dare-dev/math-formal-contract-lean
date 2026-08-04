@@ -22,7 +22,7 @@ import jsonschema
 import pytest
 
 HERE = Path(__file__).resolve().parent
-SCHEMA_DIR = HERE.parent / "schema"
+SCHEMA_DIR = HERE.parent / "mfc" / "schema"
 VALID_DIR = HERE.parent / "testdata" / "artifacts" / "valid"
 INVALID_DIR = HERE.parent / "testdata" / "artifacts" / "invalid"
 

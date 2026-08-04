@@ -1,0 +1,66 @@
+# Packaging for `mfc`.
+#
+# This file is under `contract/`, NOT at the repo root, and that is deliberate.
+# The repo root is a Lake package; putting a pyproject.toml beside lakefile.toml
+# invites tooling on either side to treat the other's tree as its own. Building
+# from `contract/` keeps the two build systems from ever seeing each other.
+#
+# ADR-0009 made `mfc` a shared tool again -- "rule 7", which had confined it to
+# the corpus server's side, came from a document that does not exist. So the
+# consuming topic repo installs this rather than vendoring schema copies with a
+# checksum-drift test, and the drift problem that vendoring solved does not
+# arise while the schemas and the emitter share a repo and a commit.
+#
+#   pip install ./contract              # from the repo root
+#   pip install './contract[yaml]'      # adds attest/review.yaml support
+#
+# NOTE: this adds no Lake dependency and cannot weaken the zero-dependency
+# invariant. That invariant is about `lakefile.toml`, and CI enforces it by
+# grepping that file.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mfc"
+version = "0.1.0"
+description = "Schemas and tooling for the math-formalization contract"
+readme = "README.md"
+# 3.9, not 3.10. The whole test suite passes on 3.9.6 -- `from __future__
+# import annotations` covers every `X | Y` annotation here and nothing else
+# needs a newer runtime. Requiring 3.10 would have locked out the default
+# system interpreter on the machine that has to consume this, for nothing.
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Chris Dare" }]
+keywords = ["lean", "formalization", "provenance", "json-schema"]
+
+# jsonschema only. The 2020-12 dialect is required, not merely preferred:
+# these schemas use `prefixItems`, `$defs` and `if`/`then` composition, and a
+# Draft-7 validator would silently ignore keywords it does not know rather
+# than fail -- which is exactly the kind of quiet downgrade this contract
+# exists to prevent.
+dependencies = ["jsonschema>=4.18"]
+
+[project.optional-dependencies]
+# `attest/review.yaml` is genuinely YAML. It is optional because every other
+# artifact is JSON, and `mfc validate` reports a missing PyYAML as a missing
+# capability rather than as an invalid artifact -- those are different facts.
+yaml = ["PyYAML>=6"]
+test = ["pytest>=7"]
+
+[project.scripts]
+mfc = "mfc.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "." }
+
+[tool.setuptools.packages.find]
+include = ["mfc*"]
+
+# The schemas ship INSIDE the package. They are the artifact `mfc` exists to
+# enforce, and an installed CLI that cannot find them is useless. They remain
+# plain JSON at a stable, greppable path for any non-Python consumer.
+[tool.setuptools.package-data]
+mfc = ["schema/*.schema.json"]

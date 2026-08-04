@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/environment-1.0.schema.json",
+  "title": "environment/1.0 - the pinned Lean environment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "env_digest",
+    "env_digest_algorithm",
+    "lean_toolchain",
+    "lean_githash",
+    "lean_options",
+    "lake_version",
+    "packages",
+    "input_rev_is_branch",
+    "root_package",
+    "axiom_policy",
+    "emitter_version",
+    "mfc_version",
+    "contract_repo"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "environment/1.0"
+    },
+    "env_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "env_digest_algorithm": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lean_toolchain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lean_githash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "lean_options": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "integer",
+          "string"
+        ]
+      }
+    },
+    "lake_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "rev",
+          "url",
+          "input_rev",
+          "inherited"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rev": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "url": {
+            "type": "string"
+          },
+          "input_rev": {
+            "type": "string"
+          },
+          "inherited": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "input_rev_is_branch": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "$comment": "GENERATED, not authored: every package whose inputRev is not a 40-hex, i.e. every package a `lake update` would silently re-resolve. Emitted so the drift risk is visible in the trust record, and it is why env_digest hashes rev and never inputRev."
+    },
+    "root_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "url",
+        "rev",
+        "tag",
+        "worktree_dirty"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string"
+        },
+        "rev": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "$comment": "A NULL TAG IS A VALID ARTIFACT BUT AN INVALID RELEASE - formal_release_pin.py refuses to pin it. This is the mechanical statement of 'arXMCP pins RELEASED formalizations'."
+        },
+        "worktree_dirty": {
+          "type": "boolean",
+          "$comment": "true fails mfc lint in CI mode."
+        }
+      }
+    },
+    "axiom_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowlist",
+        "additions"
+      ],
+      "properties": {
+        "allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "additions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "axiom",
+              "reason"
+            ],
+            "properties": {
+              "axiom": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "emitter_version": {
+      "type": "string"
+    },
+    "mfc_version": {
+      "type": "string"
+    },
+    "contract_repo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "rev"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "rev": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    }
+  }
+}

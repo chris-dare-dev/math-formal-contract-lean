@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/bundle-1.0.schema.json",
+  "title": "bundle/1.0 - in-toto Statement v1, with no aggregate verdict",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "_type",
+    "subject",
+    "contract_repo",
+    "env_digest",
+    "registry_sha256",
+    "predicates",
+    "unrecognized_predicates"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "bundle/1.0"
+    },
+    "_type": {
+      "const": "https://in-toto.io/Statement/v1"
+    },
+    "subject": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "uri",
+          "digest"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "gitCommit"
+            ],
+            "properties": {
+              "gitCommit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "gitTag": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "contract_repo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "rev"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "rev": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "env_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "registry_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "predicates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/predicate"
+      }
+    },
+    "unrecognized_predicates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/predicate"
+      },
+      "$comment": "Unknown predicateTypes are INGESTED, NEVER SERVED. formal_release_pin.py moves any type absent from the vendored predicate-types.json here and records it. That is what makes the URI extension point safe."
+    }
+  },
+  "$defs": {
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicateType",
+        "file",
+        "sha256",
+        "produced_by",
+        "produced_at",
+        "env_digest",
+        "self_attested"
+      ],
+      "properties": {
+        "predicateType": {
+          "type": "string",
+          "format": "uri"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "produced_by": {
+          "type": "string"
+        },
+        "produced_at": {
+          "type": "string"
+        },
+        "env_digest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "self_attested": {
+          "type": "boolean",
+          "$comment": "REQUIRED. Honest labelling for a solo-operated repo: true means the party that wrote the code also produced this measurement."
+        }
+      }
+    }
+  },
+  "$comment": "SLSA's VerificationSummaryAttestation is DELIBERATELY NOT USED. Its verificationResult: PASSED|FAILED is exactly the single collapsed trust token arXMCP CLAUDE.md 4.9 forbids. One subject, N independently-dated, independently-sourced predicates, no aggregate."
+}
