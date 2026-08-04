@@ -24,10 +24,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from .bundle import BundleError, build_declarations, dumps
 from .conformance import check as conformance_check
 from .conformance import evidence_table, gather
+from .join import check as join_check
+from .join import claim_table, coverage
 from .lint import FORBIDDEN_PROPERTY_NAMES, lint_schema
 from .rules import Status, check, summarize
 from .validate import (
@@ -371,6 +374,67 @@ def cmd_conformance(args: argparse.Namespace) -> int:
     return rc
 
 
+def cmd_join(args: argparse.Namespace) -> int:
+    paths = {"declarations": Path(args.declarations)}
+    for name in ("review", "resolution", "registry"):
+        if getattr(args, name):
+            paths[name] = Path(getattr(args, name))
+    for label, p in paths.items():
+        if not p.is_file():
+            print(f"error: no such {label}: {p}", file=sys.stderr)
+            return EXIT_USAGE
+
+    docs: dict[str, Any] = {}
+    try:
+        for label, p in paths.items():
+            docs[label] = load_artifact(p)
+    except (LoadError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    # Validate every input that has a schema. The registry has none yet, which
+    # is the same fact J-06 reports -- so it is passed through unvalidated and
+    # said so, rather than silently trusted.
+    for label, version in (("declarations", "declarations/1.0"),
+                           ("review", "review/1.0"),
+                           ("resolution", "resolution/1.0")):
+        if label in docs:
+            rc = _validate_against(docs[label], version, paths[label].name)
+            if rc is not None:
+                return rc
+    if "registry" in docs:
+        print("note: --registry was supplied but this build carries no registry "
+              "schema, so its contents were NOT validated.", file=sys.stderr)
+
+    results = join_check(docs["declarations"], review=docs.get("review"),
+                         resolution=docs.get("resolution"),
+                         registry=docs.get("registry"))
+    rc = _report(results, args.require_all)
+
+    rows = claim_table(docs["declarations"], review=docs.get("review"),
+                       resolution=docs.get("resolution"))
+    if rows:
+        header = ("key", "decl", "claimed", "faithful", "confirmed", "resolved",
+                  "frontier")
+        table = [header, *rows]
+        widths = [max(len(str(r[i])) for r in table) for i in range(len(header))]
+        print("\nclaims")
+        for r in table:
+            print("  " + "  ".join(str(c).ljust(w)
+                                   for c, w in zip(r, widths)).rstrip())
+        c = coverage(rows)
+        # Five separate facts. Never a ratio and never one number: "reviewed"
+        # and "resolved" are different questions about different rows.
+        print(f"\n{c.bindings} binding(s) over {c.keys} key(s); "
+              f"{c.reviewed} reviewed; {c.resolved} resolved; "
+              f"{c.frontier_open} with an open frontier")
+    else:
+        # Zero bindings is not a clean join. It is what a declarations.json
+        # built from a mis-scoped emission looks like.
+        print("\nno citation bindings: nothing to join", file=sys.stderr)
+    return rc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfc",
@@ -442,6 +506,23 @@ def build_parser() -> argparse.ArgumentParser:
     con.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     con.set_defaults(func=cmd_conformance)
+
+    joi = sub.add_parser(
+        "join",
+        help="join citations to reviews and corpus resolutions (J-01..J-06)",
+        description="Builds the claim table: one row per (key, declaration) "
+                    "binding, with the author's claim, the reviewer's finding "
+                    "and the corpus resolution kept in SEPARATE columns. "
+                    "A pure function of local JSON -- it reaches no corpus.",
+    )
+    joi.add_argument("--declarations", required=True, help="path to declarations.json")
+    joi.add_argument("--review", help="path to review.yaml/json; enables J-01..J-03")
+    joi.add_argument("--resolution", help="path to resolution.json; enables J-04, J-05")
+    joi.add_argument("--registry", help="path to the registry; enables J-06 "
+                                        "(no registry schema exists yet)")
+    joi.add_argument("--require-all", dest="require_all", action="store_true",
+                     help="treat any not_run rule as a failure")
+    joi.set_defaults(func=cmd_join)
 
     return parser
 

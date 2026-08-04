@@ -30,7 +30,8 @@ to serve this directory, the named exception in the consuming repo's
 | `mfc/bundle.py` | `declarations.json`, everything recomputed |
 | `mfc/rules.py` | the E-01..E-10 content rules |
 | `mfc/conformance.py` | the C-01..C-12 cross-artifact rules |
-| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance` |
+| `mfc/join.py` | the J-01..J-06 rules and the claim table |
+| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join` |
 | `pyproject.toml` | packaging, so a consumer can install it |
 | `testdata/schemas/invalid/` | schemas that must fail the lint |
 | `testdata/artifacts/valid/` | one filled instance per schema |
@@ -228,6 +229,71 @@ with the real digest left in place. Rebuilt truthfully from the consuming
 repo's `lake-manifest.json`, which also makes `digest.py`'s "nine of the
 fourteen packages carry `inputRev` `main` or `master`" checkable against the
 fixture instead of only asserted in prose.
+
+## `join`: three axes, three columns, no fourth column
+
+`conformance` asks whether the artifacts describe the same *build*. `join` asks
+whether they describe the same *claims*. A review, a corpus resolution and a
+citation each name a statement, and until now nothing checked that the three
+ever meet.
+
+The output is the claim table — one row per `(registry key, declaration)`
+binding:
+
+```
+  key                                        decl       claimed  faithful  confirmed  resolved  frontier
+  stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2   Topic.thm  one_way  adequate  one_way    current   -
+  stmt:9f4c1a20b7d3:bridgeland2007.prop-8.1  Topic.thm  exact    not_run   not_run    not_run   gltilde-universal-cover
+```
+
+The second row is what the table exists for: the author claims `exact`, no
+reviewer has looked, the corpus was never asked, and a frontier item is open.
+No single token can say that, which is why there are separate columns and no
+verdict — `test_no_column_is_a_verdict` keeps it that way. Absent evidence
+prints `not_run`, so the table has no empty cells to misread.
+
+Run against this repo's own test emission it reports, correctly:
+
+```
+0 passed, 0 failed, 6 not_run
+8 binding(s) over 8 key(s); 0 reviewed; 0 resolved; 1 with an open frontier
+```
+
+Nothing here is reviewed or resolved, and the output says so rather than
+looking clean.
+
+### Reviews join by digest, because a name-keyed join fails silently
+
+`review.decl` records a Lean name. Joining on it breaks under a rename: the
+type is unchanged, so `reviewed_statement_digest` still matches while `decl`
+dangles — and the join either loses the review (the axis silently reverts to
+`not_run`) or, if it is lenient, floats it onto a different declaration.
+
+So the key is the digest and `decl` is a hint whose disagreement is itself
+reported. The two failure modes are kept apart because their remedies differ:
+
+| what happened | `J-01` says |
+|---|---|
+| digest matches, name changed | nothing — this is a rename, and it is fine |
+| digest misses, `decl` present | the statement was **restated** under the review |
+| digest misses, `decl` absent | rename **and** restatement; a human must adjudicate |
+
+`J-03` refuses to merge disagreeing reviews of one statement. Deduping them
+would pick a winner, and the point is that a person has to.
+
+### `J-06` is blocked, and names what on
+
+The work queue — every registry entry with **zero inbound citations**,
+partitioned by `kind` — is the file an agent plans against. It cannot be
+written yet: there is no registry, and the set of `kind` values is exactly what
+the open registry size-ceiling decision settles (is there a `sketch` lane?).
+Guessing it would bake an unmade decision into an artifact, so `J-06` reports
+`not_run` and its reason names the decision rather than just the absence.
+
+For the same reason `--registry` is passed through **unvalidated**, and the run
+says so on stderr. There is no registry schema to validate against, and
+silently trusting the file would be the lie the rest of this package exists to
+prevent.
 
 ## `bundle` recomputes; it does not carry anything across
 
