@@ -1,6 +1,9 @@
 name = "MathFormalContract"
 version = "0.1.0"
-defaultTargets = ["MathFormalContract", "MathFormalContractTest"]
+defaultTargets = [
+  "MathFormalContract", "MathFormalContractTest",
+  "mfc_emit_self", "mfc_emit_selftest",
+]
 keywords = ["math", "formalization", "provenance"]
 
 # NO `[[require]]` BLOCKS. NOT ONE. EVER.
@@ -31,3 +34,26 @@ name = "MathFormalContract"
 [[lean_lib]]
 name = "MathFormalContractTest"
 srcDir = "test"
+
+# The emitter, pointed at this package's own library.
+#
+# Two jobs. It is the reference for the three lines a topic repo generates --
+# the only Lean the template renders -- and it is the only way to exercise the
+# real import/sweep/JSON path without a topic repo, which costs hours to build
+# because its anchor is not covered by `lake exe cache get`.
+#
+# In `defaultTargets` so `lake build` compiles it. Running it is a separate
+# step; see the determinism check in test/, which calls `emitJson` directly.
+[[lean_exe]]
+name = "mfc_emit_self"
+root = "MfcEmitSelf"
+srcDir = "exe"
+
+# The same emitter pointed at the test library, which is the only module tree
+# here carrying `@[cites]`. It answers a question the first binary structurally
+# cannot: does extension state survive `.olean` -> `importModules`? It did not,
+# silently, until `enableInitializersExecution` landed.
+[[lean_exe]]
+name = "mfc_emit_selftest"
+root = "MfcEmitSelfTest"
+srcDir = "exe"

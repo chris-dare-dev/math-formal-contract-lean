@@ -3,6 +3,7 @@ Copyright (c) 2026 Chris Dare. All rights reserved.
 Released under the MIT license.
 -/
 import MathFormalContract.Cites
+import MathFormalContract.Emit
 
 /-!
 # MathFormalContract
@@ -14,8 +15,9 @@ This package contains exactly two things, and is deliberately hard to grow:
 
 * `@[cites]` — bind a declaration to a statement in a paper, by a key that
   contains no corpus-derived bytes.
-* (next) an emitter that sweeps `Environment.constants` and reports what was
-  proved, from what, under which axioms.
+* `MathFormalContract.Emit` — an emitter that sweeps the environment and
+  reports what was proved, from what, under which axioms. It reads
+  `Environment.constants` and `Lean.collectAxioms`; it never parses source.
 
 Everything else in the contract — the JSON schemas, the fixture corpus, the
 statement registry, the resolver — lives elsewhere and is not a Lean problem.

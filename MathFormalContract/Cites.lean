@@ -89,6 +89,17 @@ structure CitesEntry where
   relation : Relation
   /-- Ids of frontier items this declaration does not discharge. -/
   frontier : Array String
+  /-- Free-text qualification of the claim. Empty means absent, and the
+  emitter writes `null` rather than `""` — a consumer must be able to tell
+  "no note" from "a note that says nothing".
+
+  Not decoration: `relation := no_claim` says two declarations are related
+  without saying how, which is unreadable without one. The emission schema
+  makes `note` a required key (nullable), and `mfc lint` rule `E-06` fails a
+  `no_claim` binding whose note is null. That rule is deliberately left on the
+  `mfc` side rather than enforced here, so the rejection fixture it names
+  stays authorable. -/
+  note : String
   deriving BEq, Hashable, Inhabited
 
 /-! ## Key validation
@@ -182,14 +193,16 @@ syntax "no_claim" : citesRelation
 
 ```lean
 @[cites "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2" (relation := one_way)
-        (frontier := ["gltilde-universal-cover"])]
+        (frontier := ["gltilde-universal-cover"])
+        (note := "Acts on PreStabilityCondition, not StabilityCondition.")]
 ```
 
-`relation` is mandatory; there is no safe default. `frontier` is optional and
-defaults to empty. -/
+`relation` is mandatory; there is no safe default. `frontier` and `note` are
+optional and default to empty. -/
 syntax (name := citesAttr)
   "cites" str "(" &"relation" ":=" citesRelation ")"
-    ("(" &"frontier" ":=" "[" str,* "]" ")")? : attr
+    ("(" &"frontier" ":=" "[" str,* "]" ")")?
+    ("(" &"note" ":=" str ")")? : attr
 
 private def parseRelation (stx : Syntax) : CoreM Relation := do
   match stx with
@@ -205,7 +218,7 @@ initialize Lean.registerBuiltinAttribute {
   descr := "Bind this declaration to a statement in a paper by registry key."
   add := fun decl stx _attrKind => do
     let `(attr| cites $key:str (relation := $rel:citesRelation)
-                  $[(frontier := [$frontier,*])]?) := stx
+                  $[(frontier := [$frontier,*])]? $[(note := $note:str)]?) := stx
       | throwUnsupportedSyntax
     let keyStr := key.getString
     match validateKey keyStr with
@@ -221,7 +234,9 @@ initialize Lean.registerBuiltinAttribute {
         throwErrorAt key
           s!"frontier id must be a lowercase letter followed by up to 63 of \
             [a-z0-9._-], got '{id}'"
-    addCitesEntry { declName := decl, key := keyStr, relation, frontier := frontierIds }
+    let noteStr : String := match note with | none => "" | some s => s.getString
+    addCitesEntry
+      { declName := decl, key := keyStr, relation, frontier := frontierIds, note := noteStr }
 }
 
 /-! ## Inspection
@@ -241,7 +256,8 @@ elab "#cites_dump" : command => do
       let front :=
         if e.frontier.isEmpty then ""
         else s!"  frontier=[{", ".intercalate e.frontier.toList}]"
-      s!"{e.key}  {e.relation}  {e.declName}{front}"
+      let nt := if e.note.isEmpty then "" else s!"  note={e.note}"
+      s!"{e.key}  {e.relation}  {e.declName}{front}{nt}"
     logInfo ("\n".intercalate lines.toList)
 
 end MathFormalContract

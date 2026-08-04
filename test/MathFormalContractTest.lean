@@ -196,6 +196,52 @@ run_cmd do
   logInfo s!"axiom audit: {checked} declarations, all within \
     [propext, Classical.choice, Quot.sound]"
 
+/-! ## The emitter is byte-reproducible
+
+`emission/1.0` is the input to every downstream digest, so two runs over an
+unchanged environment must differ in nothing but `emitted_at`. That is not free:
+neither `Environment.constants` iteration order nor `collectAxioms` output order
+is specified, and `collectAxioms` was measured returning
+`[propext, Quot.sound, Classical.choice]` for one declaration and
+`[Quot.sound, propext, Classical.choice]` for the next in the same run.
+
+Run here rather than as a shell comparison of two emitted files, so a change
+that breaks it fails `lake build` on the machine that made it. -/
+
+run_cmd Lean.Elab.Command.liftTermElabM do
+  let opts := [("autoImplicit", Lean.Json.bool false)]
+  let (a, sorryA) ← MathFormalContract.emitJson `MathFormalContract opts "FIXED"
+  let (b, sorryB) ← MathFormalContract.emitJson `MathFormalContract opts "FIXED"
+  unless a.pretty 120 == b.pretty 120 do
+    throwError "emission is not byte-reproducible across two runs"
+  unless sorryA == 0 && sorryB == 0 do
+    throwError "this package's own emission reports {sorryA} sorry-backed constant(s)"
+
+/-! ## The emitter is module-scoped, and the scope is not empty
+
+Two failures in one check. A name-prefix scope would sweep this test file's
+`MathFormalContractTest.*` declarations, because they sit under no module the
+root library owns but are perfectly ordinary constants — and a *mis-set* scope
+would sweep nothing at all and pass, which is the vacuous pass the whole
+artifact exists to make impossible. -/
+
+run_cmd Lean.Elab.Command.liftTermElabM do
+  let env ← Lean.getEnv
+  let mods := MathFormalContract.inScopeModules env `MathFormalContract
+  if mods.isEmpty then
+    throwError "in-scope module set is empty"
+  if mods.contains `MathFormalContractTest then
+    throwError "module scope leaked into the test library"
+  let (doc, _) ← MathFormalContract.emitJson `MathFormalContract [] "FIXED"
+  let .ok cs := (doc.getObjValD "constants").getArr? | throwError "no constants[]"
+  if cs.isEmpty then
+    throwError "emission swept 0 constants -- the vacuous pass"
+  for c in cs do
+    let .ok m := (c.getObjValD "module").getStr? | throwError "constant without module"
+    unless mods.contains m.toName do
+      throwError "constant emitted from out-of-scope module {m}"
+  logInfo s!"emission: {cs.size} constants across {mods.size} in-scope modules"
+
 #cites_dump
 
 end MathFormalContractTest
