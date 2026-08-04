@@ -1,13 +1,23 @@
 name: CI
 
-# Two jobs, and the second is the reason this file exists.
+# Five jobs, five distinct axes. They are not five spellings of one check and
+# a green run must not be read as a single verdict:
 #
-# `build` proves the package works on its own toolchain. `no-dependencies`
-# proves the property the whole design rests on: this package is the single
-# named exception to a consuming repo's one-pin rule, and that exception is
-# argued from having zero transitive dependencies. A `[[require]]` added here
+#   build            the Lean package elaborates on its own toolchain
+#   lean4checker     an independent kernel accepts the proofs on replay --
+#                    and says NOTHING about axioms; it exits 0 on a sorry
+#   emitter          the axiom closure is within the allowlist, no sorryAx,
+#                    and the emission is non-vacuous with its @[cites] intact
+#   contract         the schemas compile, and no schema declares a forbidden
+#                    property name (arXMCP CLAUDE.md 4.9, mechanised)
+#   no-dependencies  the leaf property the named exception rests on
+#
+# `no-dependencies` is still the reason this file exists. This package is the
+# single named exception to a consuming repo's one-pin rule, and that exception
+# is argued from having zero transitive dependencies. A `[[require]]` added here
 # in good faith would silently invalidate that argument in every topic repo
-# that took this package. So it fails the build instead.
+# that took this package. So it fails the build instead. Note it greps
+# lakefile.toml -- the Python and JSON under contract/ cannot reach it.
 
 on:
   push:
@@ -153,6 +163,59 @@ jobs:
           print(f"ok: {lib['counts']['in_scope']} in-scope constants, "
                 f"{len(cited)} cited declarations, no sorryAx")
           PY
+
+  # The contract half. Python, and deliberately NOT part of `build` -- a Lean
+  # build failure and a schema-lint failure are different facts and should not
+  # share a green check.
+  #
+  # This job does not touch the zero-dependency invariant: that is enforced by
+  # `no-dependencies` below, which greps lakefile.toml. JSON and Python appear
+  # in neither lakefile.toml nor lake-manifest.json.
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install test deps
+        run: python -m pip install --quiet pytest jsonschema
+
+      # The schemas must themselves be valid 2020-12 schemas. A schema that
+      # does not compile validates nothing, and would otherwise pass silently.
+      - name: schemas are valid JSON Schema 2020-12
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys, jsonschema
+          paths = sorted(pathlib.Path("contract/schema").glob("*.schema.json"))
+          if not paths:
+              print("::error::no schemas found -- an empty sweep is not a pass")
+              sys.exit(1)
+          for p in paths:
+              jsonschema.Draft202012Validator.check_schema(json.loads(p.read_text()))
+              print(f"ok: {p.name}")
+          PY
+
+      # Turns arXMCP CLAUDE.md 4.9 from a review habit into a build failure.
+      - name: mfc lint-schemas
+        run: python -m contract.mfc.cli lint-schemas
+
+      # The lint must FIRE, not merely pass. A gate with no failing case is not
+      # evidence, so the rejection fixtures are asserted to be rejected.
+      - name: rejection fixtures are rejected
+        run: |
+          set +e
+          python -m contract.mfc.cli lint-schemas --schema-dir contract/testdata/schemas/invalid
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "::error::rejection fixtures must exit 1, got $code -- the lint is not firing"
+            exit 1
+          fi
+          echo "ok: rejection fixtures rejected with exit 1"
+
+      - name: pytest
+        run: python -m pytest contract/tests -q
 
   no-dependencies:
     runs-on: ubuntu-latest

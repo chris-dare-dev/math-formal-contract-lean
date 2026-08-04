@@ -3,7 +3,7 @@
 The Lean half of a contract between a corpus of mathematical papers and a Lean
 formalization of results from it.
 
-It contains two things.
+It contains three things.
 
 **`@[cites]`** binds a Lean declaration to a statement in a paper.
 
@@ -18,6 +18,14 @@ theorem myResult : ... := ...
 
 **`MathFormalContract.Emit`** sweeps the environment and reports what was
 proved, from what, and under which axioms, as `emission/1.0`.
+
+**[`contract/`](contract/)** is the machine-readable half: the JSON schemas for
+those artifacts and the `mfc` tooling that polices them, including the lint that
+turns the trust-language policy into a build failure. It lives here rather than
+in the corpus server's repo by
+[ADR-0009](https://github.com/chris-dare-dev/bridgeland-stab-lean/blob/main/.claude/decisions/ADR-0009-contract-package-lives-with-the-emitter.md).
+It adds no Lake dependency and cannot weaken the zero-dependency invariant
+below.
 
 ## The emitter never parses Lean source
 

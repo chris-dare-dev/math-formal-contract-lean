@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/aggregate-status.schema.json",
+  "$comment": "REJECTION FIXTURE. A top-level aggregate token -- the exact thing arXMCP CLAUDE.md 4.9 forbids. Caught by even a shallow walk.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "bogus/1.0" },
+    "status": { "enum": ["clean", "dirty"] }
+  }
+}

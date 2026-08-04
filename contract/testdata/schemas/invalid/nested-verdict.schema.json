@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nested-verdict.schema.json",
+  "$comment": "REJECTION FIXTURE, and the one that matters. Every forbidden name here is buried where a doc['properties'] walk never looks: inside $defs, inside an allOf branch, and inside items. This is the shape emission/1.0 itself has -- it declares constant and cite under $defs -- so a shallow lint would pass this AND miss most of the real schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "records": { "type": "array", "items": { "$ref": "#/$defs/record" } }
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "verdict": { "type": "string" }
+      },
+      "allOf": [
+        { "properties": { "confidence": { "type": "number" } } }
+      ]
+    }
+  }
+}

@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/emission-1.0.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "emitter_version",
+    "lean_version",
+    "lean_githash",
+    "lean_options",
+    "pp_options",
+    "root_lib",
+    "modules",
+    "counts",
+    "constants",
+    "emitted_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "emission/1.0"
+    },
+    "emitter_version": {
+      "type": "string",
+      "pattern": "^mfc-emit/[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "lean_version": {
+      "type": "string"
+    },
+    "lean_githash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "lean_options": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "integer",
+          "string"
+        ]
+      }
+    },
+    "pp_options": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "integer",
+          "string"
+        ]
+      }
+    },
+    "root_lib": {
+      "type": "string"
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "in_scope",
+        "internal",
+        "with_range",
+        "instances",
+        "private"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "in_scope": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "internal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "with_range": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "instances": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "private": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "$comment": "minimum:1 on total and in_scope is the VACUOUS-PASS GUARD. An emission of zero constants is the observable signature of a mis-scoped emitter, and it must not validate."
+    },
+    "constants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/constant"
+      }
+    },
+    "emitted_at": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "constant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "module",
+        "kind",
+        "is_instance",
+        "is_internal",
+        "is_private",
+        "is_reducible",
+        "num_levels",
+        "type_pp",
+        "value_pp",
+        "local_deps",
+        "scc_members",
+        "axioms",
+        "range",
+        "cites"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "module": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "axiom",
+            "def",
+            "theorem",
+            "opaque",
+            "quot",
+            "inductive",
+            "ctor",
+            "rec"
+          ]
+        },
+        "is_instance": {
+          "type": "boolean"
+        },
+        "is_internal": {
+          "type": "boolean"
+        },
+        "is_private": {
+          "type": "boolean"
+        },
+        "is_reducible": {
+          "type": "boolean"
+        },
+        "num_levels": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type_pp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value_pp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "local_deps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "$comment": "SORTED. Topic-local constants only."
+        },
+        "scc_members": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "axioms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "$comment": "FULL transitive closure from Lean.collectAxioms, SORTED. collectAxioms returns them UNSORTED -- measured: [propext, Quot.sound, Classical.choice] on one decl and [Quot.sound, propext, Classical.choice] on the next in the same run. Sorting is REQUIRED for byte-reproducibility."
+        },
+        "range": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "startLine",
+                "startCol",
+                "endLine",
+                "endCol"
+              ],
+              "properties": {
+                "startLine": {
+                  "type": "integer"
+                },
+                "startCol": {
+                  "type": "integer"
+                },
+                "endLine": {
+                  "type": "integer"
+                },
+                "endCol": {
+                  "type": "integer"
+                }
+              }
+            }
+          ]
+        },
+        "cites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cite"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "value_pp is statement-relevant ONLY for these kinds; anywhere else it would fold a PROOF TERM into a statement digest, making every proof edit look like a statement change.",
+          "if": {
+            "not": {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "def",
+                    "opaque"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value_pp": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "cite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "relation_claimed",
+        "frontier",
+        "note"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^stmt:[0-9a-f]{12}:[a-z][a-z0-9._-]{0,63}$"
+        },
+        "relation_claimed": {
+          "enum": [
+            "exact",
+            "equivalent",
+            "specialization",
+            "one_way",
+            "no_claim"
+          ],
+          "$comment": "ALWAYS spelled `relation_claimed` in machine artifacts. `relation_confirmed` exists ONLY inside review/1.0. An agent reading this field reads the word 'claimed'."
+        },
+        "frontier": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
