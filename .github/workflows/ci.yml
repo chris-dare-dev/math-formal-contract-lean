@@ -26,10 +26,133 @@ jobs:
           # Deliberately NOT set: use-mathlib-cache. There is no Mathlib here,
           # and asking for its cache would imply otherwise.
           #
-          # nanoda-allow-sorry defaults to "true", which would add a checker
-          # that passes on sorry-backed proofs. Off.
-          nanoda: true
-          nanoda-allow-sorry: false
+          # nanoda: false, and NOT because the axis does not matter.
+          #
+          # `nanoda: true` cannot work at this toolchain, measured end to end:
+          #
+          #   1. lean-action's run_nanoda.sh detects the module name with
+          #      `grep -A5 '^\[package\]' lakefile.toml`. This lakefile uses the
+          #      modern top-level-key form, and Lake REJECTS the `[package]`
+          #      table the grep wants -- `missing required key: name`. So the
+          #      form the action requires is not a form Lake accepts, and the
+          #      action exposes no input to supply the name instead.
+          #   2. Past that, `leanprover/lean4export` master now emits NDJSON
+          #      format 3.1.0, while nanoda 0.3.2 expects the older
+          #      space-separated `format2024` -- both its `debug` and `v2025`
+          #      branches abort with `invalid digit found in string`.
+          #   3. The exporter that does emit `format2024`,
+          #      `ammkrn/lean4export@format2024`, is pinned to v4.20.0-rc5 and
+          #      fails to compile at v4.29.0.
+          #
+          # So the Rust-kernel axis is genuinely unavailable here, and it reads
+          # not_run rather than pass. The `lean4checker` job below supplies the
+          # independent-kernel axis it was meant to cover.
+          nanoda: false
+
+  # Replay every declaration through the kernel, in a checker that is not the
+  # one that elaborated them.
+  #
+  # This is a DIFFERENT AXIS from the axiom audit, and the two must not be read
+  # as one. lean4checker answers "does the kernel accept these proofs when
+  # replayed from scratch". It says nothing about which axioms they rest on:
+  # run against a fixture carrying `set_option maxHeartbeats 400000 in theorem
+  # sneaky : False := by sorry`, it exits 0, correctly -- a sorry-backed proof
+  # is kernel-valid, resting on the legitimately declared `sorryAx`.
+  #
+  # The axiom axis is the `emitter` job. Neither substitutes for the other.
+  lean4checker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          build: true
+          nanoda: false
+
+      - name: build lean4checker at this repo's toolchain
+        run: |
+          set -euo pipefail
+          # Exact commit, never a branch -- the same rule the Lean pins follow.
+          # Head of bump_to_v4.29.0-rc8; there is no stable v4.29.0 tag yet
+          # (latest is v4.28.0). Bump deliberately when lean-toolchain moves.
+          git -C /tmp clone https://github.com/leanprover/lean4checker.git
+          git -C /tmp/lean4checker checkout \
+            0b1d9eefeae6eb692d587fd325704856399b5caa
+          # Build it against OUR toolchain, not its own: a checker running a
+          # different Lean than the one under test is not evidence about this
+          # environment. That is the same error the corpus server's Lean
+          # verdict makes, and this repo does not get to make it too.
+          cp lean-toolchain /tmp/lean4checker/lean-toolchain
+          cd /tmp/lean4checker && lake build
+
+      - name: replay the environment
+        run: |
+          set -euo pipefail
+          for mod in MathFormalContract MathFormalContractTest; do
+            echo "::group::lean4checker $mod"
+            lake env /tmp/lean4checker/.lake/build/bin/lean4checker "$mod"
+            echo "::endgroup::"
+          done
+
+  # The axiom axis, and the vacuous-pass guard, run through the emitter itself.
+  #
+  # `builds_clean` and `axiom_count: 0` stop being assertions about one
+  # workstation only when something reproduces them. This is that something.
+  emitter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          build: true
+          nanoda: false
+
+      - name: emit, and fail on sorryAx
+        run: |
+          set -euo pipefail
+          # Non-zero exit here means a constant's axiom closure contains
+          # sorryAx. The artifact is written either way, on purpose.
+          lake exe mfc_emit_self --out attest/lean-emission.json
+          lake exe mfc_emit_selftest --out attest/test-emission.json
+
+      - name: the emission is not vacuous
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, sys
+
+          lib = json.load(open("attest/lean-emission.json"))
+          test = json.load(open("attest/test-emission.json"))
+          fail = []
+
+          # An empty emission is the observable signature of a mis-scoped
+          # emitter, and it is indistinguishable from a clean one unless
+          # something asserts otherwise.
+          if lib["counts"]["in_scope"] < 1:
+              fail.append("library emission swept 0 in-scope constants")
+          if not lib["constants"]:
+              fail.append("library emission has no constants[]")
+
+          # Extension state arrives EMPTY rather than absent when
+          # `importModules` is called without `loadExts := true`. Measured:
+          # every cites[] empty, exit 0, artifact valid. Guard it.
+          cited = [c for c in test["constants"] if c["cites"]]
+          if len(cited) < 7:
+              fail.append(f"expected >=7 cited decls in the test emission, got {len(cited)}")
+
+          for doc, name in ((lib, "library"), (test, "test")):
+              for c in doc["constants"]:
+                  if "sorryAx" in c["axioms"]:
+                      fail.append(f"{name}: {c['name']} depends on sorryAx")
+                  if c["axioms"] != sorted(c["axioms"]):
+                      fail.append(f"{name}: {c['name']} axioms unsorted")
+
+          if fail:
+              print("\n".join("::error::" + f for f in fail))
+              sys.exit(1)
+          print(f"ok: {lib['counts']['in_scope']} in-scope constants, "
+                f"{len(cited)} cited declarations, no sorryAx")
+          PY
 
   no-dependencies:
     runs-on: ubuntu-latest
@@ -82,4 +205,20 @@ jobs:
 # no text for one to hide in. Verified against a deliberately laundered
 # `native_decide` proof: swept 74, flagged 1.
 #
-# `build` above therefore already enforces it.
+# `build` above therefore already enforces it, and the `emitter` job enforces
+# it a second time on the shipped artifact rather than on the build log.
+#
+# ---------------------------------------------------------------------------
+# What each job is evidence FOR. They are four axes, not four spellings of one.
+#
+#   build          the package elaborates under its own toolchain
+#   lean4checker   an independent kernel accepts the proofs on replay --
+#                  and says NOTHING about axioms; it exits 0 on a sorry
+#   emitter        the axiom closure is within the allowlist, no sorryAx, and
+#                  the emission is non-vacuous with its @[cites] intact
+#   no-dependencies  the leaf property that the named exception rests on
+#
+# No job's result may be read as another's, and there is no aggregate. That is
+# the same rule this package exists to enforce on its own artifacts, applied to
+# its own CI.
+# ---------------------------------------------------------------------------
