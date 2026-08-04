@@ -1,0 +1,33 @@
+name = "MathFormalContract"
+version = "0.1.0"
+defaultTargets = ["MathFormalContract", "MathFormalContractTest"]
+keywords = ["math", "formalization", "provenance"]
+
+# NO `[[require]]` BLOCKS. NOT ONE. EVER.
+#
+# This package is the single named exception to the consuming repo's one-pin
+# rule (bridgeland-stab-lean CLAUDE.md §1, ADR-0008), and the exception is
+# argued *from* the leaf property: zero transitive dependencies, core Lean
+# only, no Mathlib and no anchor. A leaf cannot drag anything else into a topic
+# repo's environment and cannot disagree with an anchor about a Mathlib
+# revision.
+#
+# Adding a dependency here does not make this package slightly heavier. It
+# makes the exception lapse, and the dependency comes out of every topic repo
+# that took it. If you find yourself wanting Mathlib for a helper, write the
+# helper -- `Cites.lean` hand-rolls its key validation for exactly this reason.
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+[[lean_lib]]
+name = "MathFormalContract"
+
+# Tests are a separate library so `lake build` covers them. A test file that no
+# target builds is a test file that rots -- learned in bridgeland-stab-lean,
+# where `scripts/Audit.lean` sat uncovered and had silently stopped compiling
+# under its own package's `autoImplicit = false`.
+[[lean_lib]]
+name = "MathFormalContractTest"
+srcDir = "test"

@@ -1,0 +1,85 @@
+name: CI
+
+# Two jobs, and the second is the reason this file exists.
+#
+# `build` proves the package works on its own toolchain. `no-dependencies`
+# proves the property the whole design rests on: this package is the single
+# named exception to a consuming repo's one-pin rule, and that exception is
+# argued from having zero transitive dependencies. A `[[require]]` added here
+# in good faith would silently invalidate that argument in every topic repo
+# that took this package. So it fails the build instead.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          build: true
+          # Deliberately NOT set: use-mathlib-cache. There is no Mathlib here,
+          # and asking for its cache would imply otherwise.
+          #
+          # nanoda-allow-sorry defaults to "true", which would add a checker
+          # that passes on sorry-backed proofs. Off.
+          nanoda: true
+          nanoda-allow-sorry: false
+
+  no-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: lakefile declares no dependencies
+        run: |
+          if grep -qE '^\s*\[\[require\]\]' lakefile.toml; then
+            echo "::error file=lakefile.toml::This package must have ZERO dependencies."
+            echo ""
+            echo "It is the single named exception to the consuming repo's one-pin rule,"
+            echo "and the exception is argued FROM the leaf property. Adding a require"
+            echo "does not make this package heavier -- it makes the exception lapse,"
+            echo "and the dependency comes out of every topic repo that took this one."
+            exit 1
+          fi
+          echo "ok: no [[require]] in lakefile.toml"
+
+      - name: manifest resolves to no packages
+        run: |
+          # Check the packages array, NOT a count of '"name"' keys -- the
+          # manifest carries a top-level "name" for the package itself, so
+          # counting them reports 1 on a correct manifest. (Caught by running
+          # this guard locally before trusting it.)
+          if [ -f lake-manifest.json ]; then
+            if ! grep -qE '"packages"\s*:\s*\[\s*\]' lake-manifest.json; then
+              echo "::error file=lake-manifest.json::manifest resolves dependencies; expected none"
+              cat lake-manifest.json
+              exit 1
+            fi
+          fi
+          echo "ok: manifest resolves no packages"
+
+# The axiom guard is NOT here, deliberately.
+#
+# The obvious third job is `grep -rn native_decide --include=*.lean` — it
+# injects `Lean.ofReduceBool`, outside the allowlist this contract enforces.
+# Do not add it. A source grep is the exact failure this whole project
+# documents: the corpus server audits Lean declarations by regex over source,
+# that regex does not recognise `set_option … in theorem` as a declaration
+# site, and a sorry-backed proof rides through inside a "clean" verdict. The
+# grep here fails the same way, and additionally false-positives on the prose
+# in test/ that explains why not to use it.
+#
+# The real guard runs at BUILD time, over `Environment.constants`, in
+# test/MathFormalContractTest.lean: sweep every `MathFormalContract.*`
+# declaration, `collectAxioms` each one, fail on anything outside
+# [propext, Classical.choice, Quot.sound], and fail if the sweep saw zero
+# declarations (a vacuous pass). It cannot miss a declaration, because there is
+# no text for one to hide in. Verified against a deliberately laundered
+# `native_decide` proof: swept 74, flagged 1.
+#
+# `build` above therefore already enforces it.
