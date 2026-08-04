@@ -1,0 +1,60 @@
+{
+  "schema_version": "declarations/1.0",
+  "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
+  "emission_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "statement_digest_version": "statement-digest/1",
+  "counts": {
+    "total": 121,
+    "in_scope": 78,
+    "internal": 43,
+    "cited": 9
+  },
+  "declarations": [
+    {
+      "name": "BridgelandStabLean.Lattice.NumLattice",
+      "module": "BridgelandStabLean.Lattice.NumericalK",
+      "kind": "def",
+      "is_internal": false,
+      "statement_digest": "c44dc5545999699041be0421a8767f82c45ae16d38a736db3dbf532a3d6a1acf",
+      "local_deps": [],
+      "axioms": [],
+      "axioms_disallowed": [],
+      "contains_sorry_ax": false,
+      "local_axioms": [],
+      "range": {
+        "startLine": 27,
+        "startCol": 0,
+        "endLine": 27,
+        "endCol": 38
+      },
+      "cites": []
+    },
+    {
+      "name": "BridgelandStabLean.Lattice.finrank_numLattice",
+      "module": "BridgelandStabLean.Lattice.NumericalK",
+      "kind": "theorem",
+      "is_internal": false,
+      "statement_digest": "bee014f3f5e761cfe1e329560ab0c5f26ebf3c6c24be8c85bcfed64b7cf72af2",
+      "local_deps": [
+        "BridgelandStabLean.Lattice.NumLattice"
+      ],
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext",
+        "sorryAx"
+      ],
+      "axioms_disallowed": [],
+      "contains_sorry_ax": false,
+      "local_axioms": [],
+      "range": {
+        "startLine": 31,
+        "startCol": 0,
+        "endLine": 33,
+        "endCol": 22
+      },
+      "cites": []
+    }
+  ],
+  "$comment_fixture": "axioms contains sorryAx while contains_sorry_ax is false. The two must agree; this is the laundering the declarations allOf exists to catch."
+}

@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/declarations-1.0.schema.json",
+  "title": "declarations/1.0 - recomputed from the emission",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "env_digest",
+    "emission_sha256",
+    "statement_digest_version",
+    "counts",
+    "declarations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "declarations/1.0"
+    },
+    "env_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "emission_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "statement_digest_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "in_scope",
+        "internal",
+        "cited"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "in_scope": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "internal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cited": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "declarations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/declaration"
+      }
+    }
+  },
+  "$defs": {
+    "declaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "module",
+        "kind",
+        "is_internal",
+        "statement_digest",
+        "local_deps",
+        "axioms",
+        "axioms_disallowed",
+        "contains_sorry_ax",
+        "local_axioms",
+        "range",
+        "cites"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "module": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "axiom",
+            "def",
+            "theorem",
+            "opaque",
+            "quot",
+            "inductive",
+            "ctor",
+            "rec"
+          ]
+        },
+        "is_internal": {
+          "type": "boolean"
+        },
+        "statement_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "local_deps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "axioms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "axioms_disallowed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "$comment": "RECOMPUTED by mfc against axiom_policy. The emission never reports this field."
+        },
+        "contains_sorry_ax": {
+          "type": "boolean"
+        },
+        "local_axioms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "range": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "startLine",
+                "startCol",
+                "endLine",
+                "endCol"
+              ],
+              "properties": {
+                "startLine": {
+                  "type": "integer"
+                },
+                "startCol": {
+                  "type": "integer"
+                },
+                "endLine": {
+                  "type": "integer"
+                },
+                "endCol": {
+                  "type": "integer"
+                }
+              }
+            }
+          ]
+        },
+        "cites": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "relation_claimed",
+              "frontier",
+              "note"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^stmt:[0-9a-f]{12}:[a-z][a-z0-9._-]{0,63}$"
+              },
+              "relation_claimed": {
+                "enum": [
+                  "exact",
+                  "equivalent",
+                  "specialization",
+                  "one_way",
+                  "no_claim"
+                ]
+              },
+              "frontier": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "A declaration carrying sorryAx must report it in BOTH places, consistently. The invalid/sorry-laundered fixture flips exactly one and MUST be rejected.",
+          "if": {
+            "properties": {
+              "contains_sorry_ax": {
+                "const": true
+              }
+            },
+            "required": [
+              "contains_sorry_ax"
+            ]
+          },
+          "then": {
+            "properties": {
+              "axioms": {
+                "contains": {
+                  "const": "sorryAx"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "axioms": {
+                "contains": {
+                  "const": "sorryAx"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "contains_sorry_ax": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

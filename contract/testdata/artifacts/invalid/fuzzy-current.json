@@ -1,0 +1,40 @@
+{
+  "schema_version": "resolution/1.0",
+  "registry_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "notebook": "bridgeland-stability",
+  "corpus_version": 5048,
+  "corpus_manifest_content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+  "resolver_version": "arxmcp/statement_resolve.py@1.0.0",
+  "chunker_version": "chunker/2.3.0",
+  "generated_at": "2026-08-04T08:55:10Z",
+  "results": [
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2",
+      "resolution": "current",
+      "matched_by": "fuzzy",
+      "chunk_id": "arxiv:math/0212237:a82c3230040fd724",
+      "matched_body_sha256": "ebacfe5caa6c1df8229ec6bfbcf55f855a524a77cf78a9fb3171b81172d6f50d",
+      "printed_number": "8.2",
+      "similarity": 0.97,
+      "reason": null
+    },
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.obl-stab-action",
+      "resolution": "not_run",
+      "matched_by": "none",
+      "chunk_id": null,
+      "matched_body_sha256": null,
+      "printed_number": null,
+      "similarity": null,
+      "reason": "kind==obligation and quote_sha256 is null; nothing to resolve"
+    }
+  ],
+  "counts": {
+    "current": 1,
+    "drifted": 0,
+    "unresolvable": 0,
+    "paper_absent": 0,
+    "not_run": 1
+  },
+  "$comment_fixture": "A fuzzy match claiming resolution=current. Nearest-neighbour similarity is not identity; this is the rule that stops a dense-ANN system re-pointing a citation at a different theorem."
+}

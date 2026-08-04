@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/build-1.0.schema.json",
+  "title": "build/1.0 - what the build actually reported",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "env_digest",
+    "lake_build_exit",
+    "lake_build_jobs",
+    "diagnostics",
+    "error_count",
+    "warning_count",
+    "sorry_diagnostic_count",
+    "independent_checkers",
+    "ci",
+    "produced_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "build/1.0"
+    },
+    "env_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "lake_build_exit": {
+      "type": "integer",
+      "$comment": "RECORDED, NEVER THE GATE. Measured on this toolchain: `lake env lean` on a file whose #print axioms prints [sorryAx] exits 0, and so does -E hasSorry. sorry_diagnostic_count is the gate."
+    },
+    "lake_build_jobs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file_name",
+          "severity",
+          "kind",
+          "pos",
+          "end_pos",
+          "data"
+        ],
+        "properties": {
+          "file_name": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "pos": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "line",
+              "column"
+            ],
+            "properties": {
+              "line": {
+                "type": "integer"
+              },
+              "column": {
+                "type": "integer"
+              }
+            }
+          },
+          "end_pos": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "line",
+              "column"
+            ],
+            "properties": {
+              "line": {
+                "type": "integer"
+              },
+              "column": {
+                "type": "integer"
+              }
+            }
+          },
+          "data": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "error_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "warning_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sorry_diagnostic_count": {
+      "type": "integer",
+      "minimum": 0,
+      "$comment": "Counted from NDJSON records with kind == hasSorry, never from the exit code."
+    },
+    "independent_checkers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "version",
+          "value",
+          "allow_sorry"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "value": {
+            "enum": [
+              "pass",
+              "fail",
+              "not_run",
+              "not_applicable"
+            ]
+          },
+          "allow_sorry": {
+            "type": "boolean"
+          }
+        },
+        "allOf": [
+          {
+            "$comment": "A checker that passed WHILE PERMITTING sorry has not checked the thing this axis is about.",
+            "if": {
+              "properties": {
+                "value": {
+                  "const": "pass"
+                }
+              },
+              "required": [
+                "value"
+              ]
+            },
+            "then": {
+              "properties": {
+                "allow_sorry": {
+                  "const": false
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_url",
+        "workflow_sha",
+        "runner"
+      ],
+      "properties": {
+        "run_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workflow_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "runner": {
+          "type": "string"
+        }
+      }
+    },
+    "produced_at": {
+      "type": "string"
+    }
+  }
+}

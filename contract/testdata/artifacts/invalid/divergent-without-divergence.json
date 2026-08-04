@@ -1,0 +1,22 @@
+{
+  "schema_version": "review/1.0",
+  "reviews": [
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2",
+      "decl": "BridgelandStabLean.GroupAction.preMulAction",
+      "reviewer": {
+        "name": "Chris Dare",
+        "email": "chris.dare.bak@gmail.com"
+      },
+      "reviewed_at": "2026-08-11",
+      "reviewed_statement_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "reviewed_quote_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "reviewed_env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
+      "faithfulness": "divergent",
+      "relation_confirmed": "one_way",
+      "divergences": [],
+      "note": "Reviewed against the arXiv PDF at the version pinned in registry source.version."
+    }
+  ],
+  "$comment_fixture": "faithfulness=divergent with an empty divergences list. A divergent verdict that does not say how is not a review."
+}

@@ -23,16 +23,56 @@ to serve this directory, the named exception in the consuming repo's
 
 | path | what |
 |---|---|
-| `schema/emission-1.0.schema.json` | the emitter's output format |
+| `schema/*.schema.json` | **all seven** artifact formats |
 | `mfc/lint.py` | the banned-property lint |
 | `mfc/cli.py` | `mfc lint-schemas` |
-| `testdata/schemas/invalid/` | rejection fixtures |
+| `testdata/schemas/invalid/` | schemas that must fail the lint |
+| `testdata/artifacts/valid/` | one filled instance per schema |
+| `testdata/artifacts/invalid/` | artifacts that must fail a cross-field rule |
 | `tests/` | pytest |
 
-Six schemas are still to come — `environment`, `declarations`, `review`,
-`build`, `bundle`, `resolution`. Only `emission` was fully specified in the
-design note; two of the others are near-full and four are filled instances plus
-prose, so they are authoring work rather than transcription.
+### How much of each schema was given, and how much was authored
+
+Only `emission` was fully copy-pasteable from the design note. This matters for
+review: the rest are **authored**, and authoring can drift from intent in a way
+transcription cannot.
+
+| schema | source | check that it did not drift |
+|---|---|---|
+| `emission` | full JSON | fixture is trimmed **real emitter output** |
+| `review` | near-full JSON, missing only the wrapper | accepts the note's instance |
+| `resolution` | `$defs.result` full; envelope inferred from the instance | accepts the note's instance |
+| `declarations` | instance + one `allOf` fragment | accepts the note's instance |
+| `build` | instance + one `if/then` fragment | accepts the note's instance |
+| `environment` | instance + prose bullets, no JSON | accepts the note's instance |
+| `bundle` | instance + prose bullets, no JSON | accepts the note's instance |
+
+### The rules that carry the trust model
+
+Every `allOf` in these schemas encodes a trust rule, not a formatting
+preference, and each has a fixture that must be **rejected** — a conditional
+that never fires is indistinguishable from one that is not there:
+
+| fixture | what it smuggles |
+|---|---|
+| `sorry-laundered` | `sorryAx` in `axioms` while `contains_sorry_ax` is false |
+| `fuzzy-current` | a fuzzy match claiming `current` — similarity is not identity |
+| `current-without-digest` | `current` without the recomputed body digest |
+| `exact-with-divergence` | `relation_confirmed: exact` alongside a divergence |
+| `divergent-without-divergence` | a divergent verdict that does not say how |
+| `checker-pass-allow-sorry` | a checker that passed *while permitting* sorry |
+| `aggregate-verdict` | an SLSA-style `verificationResult` on the bundle |
+
+The last one is why `additionalProperties: false` is everywhere rather than
+just tidy: it is what stops a single collapsed trust token being added to an
+artifact at all.
+
+### One judgement call worth flagging
+
+The note's filled instances carry `$comment` keys as reader documentation.
+Those are **not** in the schemas, so a real artifact may not contain them —
+they were annotations for a human, not fields. If they were meant to survive
+into the artifacts, the schemas need `$comment` allowed explicitly.
 
 ## Running it
 

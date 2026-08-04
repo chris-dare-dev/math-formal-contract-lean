@@ -1,0 +1,59 @@
+{
+  "schema_version": "environment/1.0",
+  "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
+  "env_digest_algorithm": "sha256(canonical_json({lean_toolchain,lean_githash,lean_options,packages:[[name,rev]] sorted}))",
+  "lean_toolchain": "leanprover/lean4:v4.29.0",
+  "lean_githash": "98dc76e3c0a9b856c9b98726b713fb04fab16740",
+  "lean_options": {
+    "autoImplicit": false,
+    "relaxedAutoImplicit": false
+  },
+  "lake_version": "5.0.0-src+98dc76e",
+  "packages": [
+    {
+      "name": "BridgelandStability",
+      "rev": "9e48f23a382ba117b63076a33e0e775389fef1ba",
+      "url": "https://github.com/mattrobball/BridgelandStability",
+      "input_rev": "9e48f23a382ba117b63076a33e0e775389fef1ba",
+      "inherited": false
+    },
+    {
+      "name": "mathlib",
+      "rev": "8a178386ffc0f5fef0b77738bb5449d50efeea95",
+      "url": "https://github.com/leanprover-community/mathlib4",
+      "input_rev": "v4.29.0",
+      "inherited": true
+    },
+    {
+      "name": "batteries",
+      "rev": "756e3321fd3b02a85ffda19fef789916223e578c",
+      "url": "https://github.com/leanprover-community/batteries",
+      "input_rev": "main",
+      "inherited": true
+    }
+  ],
+  "input_rev_is_branch": [
+    "batteries"
+  ],
+  "root_package": {
+    "name": "BridgelandStabLean",
+    "url": "https://github.com/chris-dare-dev/bridgeland-stab-lean",
+    "rev": "f166a3d73e2062052b249102001900b3beb929d1",
+    "tag": "v0.1.0",
+    "worktree_dirty": false
+  },
+  "axiom_policy": {
+    "allowlist": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "additions": []
+  },
+  "emitter_version": "mfc-emit/1.0.0",
+  "mfc_version": "1.0.0",
+  "contract_repo": {
+    "url": "https://github.com/chris-dare-dev/math-formal-contract-lean",
+    "rev": "0000000000000000000000000000000000000000"
+  }
+}

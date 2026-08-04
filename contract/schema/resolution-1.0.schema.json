@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/resolution-1.0.schema.json",
+  "title": "resolution/1.0 - the one artifact arXMCP produces",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "registry_sha256",
+    "notebook",
+    "corpus_version",
+    "corpus_manifest_content_hash",
+    "resolver_version",
+    "chunker_version",
+    "generated_at",
+    "results",
+    "counts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "resolution/1.0"
+    },
+    "registry_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "$comment": "THE ENTIRE CROSS-REPO FRESHNESS MECHANISM. One comparison, no clocks, no mtimes, no network. Editing the registry without re-running the resolver turns CI red, and there is no way to forget."
+    },
+    "notebook": {
+      "type": "string",
+      "minLength": 1
+    },
+    "corpus_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "corpus_manifest_content_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "resolver_version": {
+      "type": "string"
+    },
+    "chunker_version": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/result"
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "current",
+        "drifted",
+        "unresolvable",
+        "paper_absent",
+        "not_run"
+      ],
+      "properties": {
+        "current": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "drifted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unresolvable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "paper_absent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_run": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "resolution",
+        "matched_by",
+        "chunk_id",
+        "matched_body_sha256",
+        "printed_number",
+        "similarity",
+        "reason"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^stmt:[0-9a-f]{12}:[a-z][a-z0-9._-]{0,63}$"
+        },
+        "resolution": {
+          "enum": [
+            "current",
+            "drifted",
+            "unresolvable",
+            "paper_absent",
+            "not_run"
+          ]
+        },
+        "matched_by": {
+          "enum": [
+            "quote_sha256",
+            "printed_number",
+            "fuzzy",
+            "none"
+          ]
+        },
+        "chunk_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "matched_body_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "printed_number": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "similarity": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`current` REQUIRES a recomputed body digest. A resolver that says current without showing its work is rejected.",
+          "if": {
+            "properties": {
+              "resolution": {
+                "const": "current"
+              }
+            },
+            "required": [
+              "resolution"
+            ]
+          },
+          "then": {
+            "required": [
+              "matched_body_sha256",
+              "chunk_id"
+            ],
+            "properties": {
+              "matched_body_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "chunk_id": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "A FUZZY match can NEVER be current. Nearest-neighbour similarity is not identity - this is the single line that stops a dense-ANN retrieval system silently re-pointing a citation at a different theorem.",
+          "if": {
+            "properties": {
+              "matched_by": {
+                "const": "fuzzy"
+              }
+            },
+            "required": [
+              "matched_by"
+            ]
+          },
+          "then": {
+            "properties": {
+              "resolution": {
+                "enum": [
+                  "drifted",
+                  "unresolvable"
+                ]
+              },
+              "similarity": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "printed_number is a HINT. It is populated only on the ar5iv/LaTeXML path (36 of 66 chunks even on the flagship paper), and authors renumber between versions.",
+          "if": {
+            "properties": {
+              "matched_by": {
+                "const": "printed_number"
+              }
+            },
+            "required": [
+              "matched_by"
+            ]
+          },
+          "then": {
+            "properties": {
+              "resolution": {
+                "enum": [
+                  "drifted"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

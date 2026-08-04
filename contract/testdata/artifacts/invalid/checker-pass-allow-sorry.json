@@ -1,0 +1,46 @@
+{
+  "schema_version": "build/1.0",
+  "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
+  "lake_build_exit": 0,
+  "lake_build_jobs": 3428,
+  "diagnostics": [
+    {
+      "file_name": "BridgelandStabLean/GroupAction/SlicingAction.lean",
+      "severity": "warning",
+      "kind": "linter.unusedVariables",
+      "pos": {
+        "line": 121,
+        "column": 8
+      },
+      "end_pos": {
+        "line": 121,
+        "column": 30
+      },
+      "data": "unused variable `hb`"
+    }
+  ],
+  "error_count": 0,
+  "warning_count": 1,
+  "sorry_diagnostic_count": 0,
+  "independent_checkers": [
+    {
+      "name": "leanchecker",
+      "version": "bundled-4.29.0",
+      "value": "pass",
+      "allow_sorry": true
+    },
+    {
+      "name": "nanoda",
+      "version": "unknown",
+      "value": "not_run",
+      "allow_sorry": false
+    }
+  ],
+  "ci": {
+    "run_url": "https://github.com/chris-dare-dev/bridgeland-stab-lean/actions/runs/1",
+    "workflow_sha": "f166a3d73e2062052b249102001900b3beb929d1",
+    "runner": "ubuntu-24.04"
+  },
+  "produced_at": "2026-08-04T09:12:41Z",
+  "$comment_fixture": "A checker reporting value=pass with allow_sorry=true. It has not checked the thing this axis is about."
+}

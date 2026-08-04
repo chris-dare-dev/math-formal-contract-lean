@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/review-1.0.schema.json",
+  "title": "review/1.0 - the only contract file no machine may write",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "reviews"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "review/1.0"
+    },
+    "reviews": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/review"
+      }
+    }
+  },
+  "$defs": {
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "decl",
+        "reviewer",
+        "reviewed_at",
+        "reviewed_statement_digest",
+        "reviewed_quote_sha256",
+        "reviewed_env_digest",
+        "faithfulness",
+        "relation_confirmed",
+        "divergences"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^stmt:[0-9a-f]{12}:[a-z][a-z0-9._-]{0,63}$"
+        },
+        "decl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "affiliation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "reviewed_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "reviewed_statement_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reviewed_quote_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reviewed_env_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "faithfulness": {
+          "enum": [
+            "adequate",
+            "divergent",
+            "inadequate",
+            "inconclusive"
+          ],
+          "$comment": "`inconclusive` is a COMPLETE and LEGITIMATE outcome - abstention is a success, not a failure. There is deliberately no agent_drafted state: it would let an LLM verdict occupy the one axis that exists to catch what an LLM cannot."
+        },
+        "relation_confirmed": {
+          "enum": [
+            "exact",
+            "equivalent",
+            "specialization",
+            "one_way",
+            "no_claim",
+            "disputed"
+          ],
+          "$comment": "relation_confirmed appears ONLY in this file. Machine artifacts always say relation_claimed."
+        },
+        "divergences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "A divergent or inadequate verdict without a written divergence is not a review.",
+          "if": {
+            "properties": {
+              "faithfulness": {
+                "enum": [
+                  "divergent",
+                  "inadequate"
+                ]
+              }
+            },
+            "required": [
+              "faithfulness"
+            ]
+          },
+          "then": {
+            "properties": {
+              "divergences": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "$comment": "`exact` confirmed with a stated divergence is self-contradictory.",
+          "if": {
+            "properties": {
+              "relation_confirmed": {
+                "const": "exact"
+              }
+            },
+            "required": [
+              "relation_confirmed"
+            ]
+          },
+          "then": {
+            "properties": {
+              "divergences": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -214,6 +214,12 @@ jobs:
           fi
           echo "ok: rejection fixtures rejected with exit 1"
 
+      # Every schema must ACCEPT its filled instance and every cross-field rule
+      # must REJECT something. Five of the seven schemas were authored from an
+      # instance plus prose rather than transcribed, so "accepts its own
+      # instance" is the only check that the authoring did not drift -- and a
+      # conditional that never fires is indistinguishable from one that is not
+      # there.
       - name: pytest
         run: python -m pytest contract/tests -q
 

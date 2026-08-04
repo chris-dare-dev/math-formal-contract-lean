@@ -1,0 +1,90 @@
+{
+  "schema_version": "emission/1.0",
+  "root_lib": "MathFormalContractTest",
+  "pp_options": {
+    "pp.universes": true,
+    "pp.notation": true,
+    "pp.fullNames": true,
+    "pp.explicit": false,
+    "format.width": 120
+  },
+  "modules": [
+    "MathFormalContractTest"
+  ],
+  "lean_version": "4.29.0",
+  "lean_options": {
+    "relaxedAutoImplicit": false,
+    "autoImplicit": false
+  },
+  "lean_githash": "98dc76e3c0a9b856c9b98726b713fb04fab16740",
+  "emitter_version": "mfc-emit/1.0.0",
+  "emitted_at": "2026-08-04T00:00:00Z",
+  "counts": {
+    "total": 2,
+    "in_scope": 2,
+    "internal": 0,
+    "with_range": 2,
+    "instances": 0,
+    "private": 0
+  },
+  "constants": [
+    {
+      "value_pp": "0",
+      "type_pp": "Nat",
+      "scc_members": [],
+      "range": {
+        "startLine": 108,
+        "startCol": 0,
+        "endLine": 110,
+        "endCol": 24
+      },
+      "num_levels": 0,
+      "name": "MathFormalContractTest.taggedDef",
+      "module": "MathFormalContractTest",
+      "local_deps": [],
+      "kind": "def",
+      "is_reducible": false,
+      "is_private": false,
+      "is_internal": false,
+      "is_instance": false,
+      "cites": [
+        {
+          "relation_claimed": "no_claim",
+          "note": null,
+          "key": "stmt:9f4c1a20b7d3:test.ondef",
+          "frontier": []
+        }
+      ],
+      "axioms": []
+    },
+    {
+      "value_pp": null,
+      "type_pp": "True",
+      "scc_members": [],
+      "range": {
+        "startLine": 92,
+        "startCol": 0,
+        "endLine": 94,
+        "endCol": 43
+      },
+      "num_levels": 0,
+      "name": "MathFormalContractTest.tagged_equivalent",
+      "module": "MathFormalContractTest",
+      "local_deps": [],
+      "kind": "theorem",
+      "is_reducible": false,
+      "is_private": false,
+      "is_internal": false,
+      "is_instance": false,
+      "cites": [
+        {
+          "relation_claimed": "equivalent",
+          "note": null,
+          "key": "stmt:9f4c1a20b7d3:test.equivalent",
+          "frontier": []
+        }
+      ],
+      "axioms": []
+    }
+  ]
+}
