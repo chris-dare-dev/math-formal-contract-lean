@@ -118,3 +118,22 @@ def test_no_schema_declares_an_aggregate_token() -> None:
 
     for name in SCHEMAS:
         assert lint_schema(_schema(name)) == [], f"{name} declares a forbidden name"
+
+
+def test_an_empty_emission_is_not_a_representable_artifact() -> None:
+    """The vacuous-pass guard is STRUCTURAL, not a rule.
+
+    `constants: minItems 1` plus `counts.total/in_scope: minimum 1` mean an
+    emission over zero declarations cannot be written down, so no consumer has
+    to remember to check for one. `E-08` and `check-ilean-coverage`'s `I-02`
+    restate the same property for a caller that skipped validation; this is the
+    line that actually enforces it, and it is asserted here so that relaxing the
+    schema is a visible decision rather than a silent transfer of
+    responsibility to a rule that every CLI path skips.
+    """
+    schema = json.loads(
+        (SCHEMA_DIR / "emission-1.0.schema.json").read_text(encoding="utf-8"))
+    assert schema["properties"]["constants"]["minItems"] == 1
+    counts = schema["properties"]["counts"]["properties"]
+    assert counts["total"]["minimum"] == 1
+    assert counts["in_scope"]["minimum"] == 1

@@ -31,7 +31,8 @@ to serve this directory, the named exception in the consuming repo's
 | `mfc/rules.py` | the E-01..E-10 content rules |
 | `mfc/conformance.py` | the C-01..C-12 cross-artifact rules |
 | `mfc/join.py` | the J-01..J-06 rules and the claim table |
-| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join` |
+| `mfc/ilean.py` | the I-01..I-05 coverage rules |
+| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join`, `check-ilean-coverage` |
 | `pyproject.toml` | packaging, so a consumer can install it |
 | `testdata/schemas/invalid/` | schemas that must fail the lint |
 | `testdata/artifacts/valid/` | one filled instance per schema |
@@ -294,6 +295,65 @@ For the same reason `--registry` is passed through **unvalidated**, and the run
 says so on stderr. There is no registry schema to validate against, and
 silently trusting the file would be the lie the rest of this package exists to
 prevent.
+
+## `check-ilean-coverage`: the only check that looks for what is *absent*
+
+Every other rule here reads the emission and asks whether what it contains is
+allowed. A mis-scoped emitter produces a perfectly valid, perfectly lint-clean
+emission over the wrong set of modules, and every downstream artifact is then
+immaculate and incomplete.
+
+`lake build` writes one `.ilean` per module beside the `.olean`, listing the
+source-written declaration names. It is plain JSON, and it is produced by Lake
+rather than by us — the one description of "what was built" that does not come
+from the emitter.
+
+### Why it is not circular
+
+The emission carries a `modules[]` array computed by the emitter's own
+`inScopeModules`. Comparing `.ilean` files against *that* would check the
+emitter against itself: a scope bug drops a module from `modules[]` **and**
+from `constants[]`, leaving the emission perfectly self-consistent. So the
+in-scope set is re-derived from the filesystem using only the **declared**
+`root_lib` (which `--lib` overrides), and `I-04` compares the two derivations.
+`test_i04_catches_a_scope_bug_that_a_self_comparison_cannot` is the test that
+holds the line.
+
+### Module prefixes are components, never strings
+
+`"TopicTest".startswith("Topic")` is `True`, and `TopicTest` is not a submodule
+of `Topic`. A string prefix pulls the sibling test library into scope, and then
+the coverage check fails on declarations the emitter is *correct* to exclude.
+Measured on this repo: 6 built modules, 3 in scope, 29 in-scope declarations,
+0 missing — with `MathFormalContractTest` and both executables correctly out.
+
+### The bootstrap is solved a level up, and that changed what E-08 is for
+
+Writing this surfaced something about the existing design. #31 warns that a
+zero-declaration first build would fire the guard and stop any adopter reaching
+a first green build. It cannot: `emission-1.0.schema.json` sets
+`constants: minItems 1` and `counts.total/in_scope: minimum 1`, so an empty
+emission is **not a representable artifact**, and every subcommand validates
+before it reads.
+
+Which means `E-08`'s counts half — documented above as the vacuous-pass rule —
+is **unreachable through any `mfc` subcommand**. The `empty-emission` fixture
+is rejected by `mfc validate`, not by `E-08`; its test calls `check()` directly
+and so never noticed. That is the *right* arrangement, and the same one
+`additionalProperties: false` gives the trust-token ban — a structural
+guarantee beats a rule that a caller can skip. But it was credited to the wrong
+mechanism, so both are now labelled for what they are, and
+`test_an_empty_emission_is_not_a_representable_artifact` pins the schema
+constraint so that relaxing it becomes a visible decision rather than a silent
+transfer of responsibility to a rule nothing runs.
+
+The half that no `minItems` can see is the **partial** sweep, and that is what
+this command is for. No `--allow-empty` flag exists, deliberately: it would
+collapse "genuinely empty repository" and "mis-scoped emitter" into one state,
+which is the exact failure the check exists to prevent. They are already
+distinct — `.ilean` carrying declarations while `constants[]` is empty is the
+bug; both empty is a fresh repo; **no `.ilean` at all is exit 2**, because a
+mis-pointed build directory must never be reportable as full coverage.
 
 ## `bundle` recomputes; it does not carry anything across
 

@@ -29,6 +29,10 @@ from typing import Any
 from .bundle import BundleError, build_declarations, dumps
 from .conformance import check as conformance_check
 from .conformance import evidence_table, gather
+from .ilean import DEFAULT_BUILD_DIR, IleanError
+from .ilean import check as ilean_check
+from .ilean import coverage as ilean_coverage
+from .ilean import load_modules
 from .join import check as join_check
 from .join import claim_table, coverage
 from .lint import FORBIDDEN_PROPERTY_NAMES, lint_schema
@@ -435,6 +439,45 @@ def cmd_join(args: argparse.Namespace) -> int:
     return rc
 
 
+def cmd_check_ilean_coverage(args: argparse.Namespace) -> int:
+    emission_path = Path(args.emission)
+    if not emission_path.is_file():
+        print(f"error: no such emission: {emission_path}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        emission = load_artifact(emission_path)
+    except (LoadError, OSError) as exc:
+        print(f"error: {emission_path.name}: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _validate_against(emission, "emission/1.0", emission_path.name)
+    if rc is not None:
+        return rc
+
+    try:
+        modules = load_modules(Path(args.build_dir) if args.build_dir
+                               else DEFAULT_BUILD_DIR)
+    except IleanError as exc:
+        # The check did not run. Exit 2, never 1 -- "no .ilean files" must not
+        # be reportable as "everything is covered".
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    results = ilean_check(emission, modules, lib=args.lib)
+    rc = _report(results, args.require_all)
+
+    c = ilean_coverage(emission, modules, lib=args.lib)
+    print(f"\n{c.in_scope_modules} in-scope module(s) of {len(modules)} built; "
+          f"{c.built_declarations} built declaration(s); "
+          f"{c.emitted_constants} emitted constant(s); {c.missing} missing")
+    if c.built_declarations == 0:
+        print("note: the in-scope modules carry NO declarations. Consistent with "
+              "an empty emission, and this is what a repository's first build "
+              "looks like -- but nothing was checked, because there is nothing "
+              "to check.", file=sys.stderr)
+    return rc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfc",
@@ -523,6 +566,24 @@ def build_parser() -> argparse.ArgumentParser:
     joi.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     joi.set_defaults(func=cmd_join)
+
+    cov = sub.add_parser(
+        "check-ilean-coverage",
+        help="set-diff what lake built against what the emitter swept (I-01..I-05)",
+        description="The vacuous-pass guard. Every other check reads the "
+                    "emission and asks whether what it CONTAINS is allowed; "
+                    "this asks whether anything is MISSING, using the .ilean "
+                    "files lake writes -- the one description of what was built "
+                    "that does not come from the emitter.",
+    )
+    cov.add_argument("--emission", required=True, help="path to lean-emission.json")
+    cov.add_argument("--build-dir", dest="build_dir",
+                     help=f"where lake writes .ilean (default: {DEFAULT_BUILD_DIR})")
+    cov.add_argument("--lib", help="root library module name; overrides the "
+                                   "emission's declared root_lib")
+    cov.add_argument("--require-all", dest="require_all", action="store_true",
+                     help="treat any not_run rule as a failure")
+    cov.set_defaults(func=cmd_check_ilean_coverage)
 
     return parser
 

@@ -170,7 +170,19 @@ def check(
                     f"statements can hash identically, and it cannot be re-elaborated"))
     add("E-07", "no type_pp or value_pp is elided", e07)
 
-    # E-08 -- the vacuous pass. The `.ilean` half is `check-ilean-coverage`.
+    # E-08 -- the vacuous pass, restated.
+    #
+    # Worth knowing before relying on it: this rule is UNREACHABLE through any
+    # `mfc` subcommand. The emission schema sets `constants: minItems 1` and
+    # `counts.total/in_scope: minimum 1`, so an empty emission is not a
+    # representable artifact, and every subcommand validates before it reads --
+    # the `empty-emission` fixture is rejected by `mfc validate`, not by this.
+    #
+    # It is kept, and kept honest, for a caller that reaches `check()` directly.
+    # The property is enforced structurally, which is the stronger arrangement;
+    # a rule that a CLI path can skip is the weaker one, and it should not be
+    # what the vacuous-pass guarantee rests on. The `.ilean` half -- a PARTIAL
+    # sweep, which no `minItems` can see -- is `mfc check-ilean-coverage`.
     e08 = ([] if emission["counts"]["in_scope"] >= 1
            else [Finding("E-08", "counts.in_scope",
                          "0 in-scope constants; an empty emission is the "
@@ -178,8 +190,9 @@ def check(
     results.append(RuleResult(
         "E-08", "the emission is not vacuous",
         Status.FAIL if e08 else Status.PASS, tuple(e08),
-        reason="" if e08 else "counts half only; the .ilean coverage half is "
-                              "mfc check-ilean-coverage"))
+        reason="" if e08 else "counts half only, and structurally guaranteed by "
+                              "the schema before this runs; the half that finds a "
+                              "PARTIAL sweep is mfc check-ilean-coverage"))
 
     # E-09 -- closed lanes, mechanised.
     if closed_lanes is None:

@@ -147,6 +147,14 @@ jobs:
             --environment contract/testdata/artifacts/valid/environment-1.0.json \
             --closed-lanes contract/testdata/closed-lanes.json
 
+      - name: mfc check-ilean-coverage (the vacuous-pass guard, #31)
+        run: |
+          # The only check that looks for what is ABSENT. Compares the .ilean
+          # files lake wrote against constants[].name -- the one description of
+          # what was built that does not come from the emitter, so a scope bug
+          # cannot hide by being self-consistent.
+          mfc check-ilean-coverage --emission attest/lean-emission.json
+
       - name: the emission is not vacuous
         run: |
           set -euo pipefail
