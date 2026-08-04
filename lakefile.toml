@@ -48,6 +48,15 @@ srcDir = "test"
 name = "mfc_emit_self"
 root = "MfcEmitSelf"
 srcDir = "exe"
+# Required by any binary that loads an environment with `importModules`, which
+# pulls in `Init`/`Std`/`Lean` declarations having no native implementation.
+#
+# Omitting it FAILS ONLY ON LINUX: macOS resolves the missing symbol
+# dynamically and the binary runs, so this passed locally and failed in CI with
+# "Could not find native implementation of external declaration
+# 'IO.getRandomBytes'". A topic repo's generated emitter needs it for the same
+# reason, so the template must render it too.
+supportInterpreter = true
 
 # The same emitter pointed at the test library, which is the only module tree
 # here carrying `@[cites]`. It answers a question the first binary structurally
@@ -57,3 +66,4 @@ srcDir = "exe"
 name = "mfc_emit_selftest"
 root = "MfcEmitSelfTest"
 srcDir = "exe"
+supportInterpreter = true

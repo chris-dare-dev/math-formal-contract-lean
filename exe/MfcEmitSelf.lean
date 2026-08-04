@@ -31,6 +31,13 @@ def main (args : List String) : IO UInt32 :=
 That is deliberately the *only* Lean the topic template renders, so a
 `copier update` never three-way-merges a metaprogram.
 
+Its `[[lean_exe]]` needs `supportInterpreter = true`, and the template must
+render that too. `importModules` reaches `Init`/`Std`/`Lean` declarations with
+no native implementation, and omitting the flag **fails only on Linux** —
+macOS resolves the symbol dynamically, so the binary runs locally and dies in
+CI with `Could not find native implementation of external declaration
+'IO.getRandomBytes'`.
+
 `leanOptions` must mirror the `[leanOptions]` block of the same repo's
 `lakefile.toml` — here, `autoImplicit = false` and `relaxedAutoImplicit =
 false`. It is declared rather than observed because elaboration options are
