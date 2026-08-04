@@ -36,6 +36,17 @@ class LoadError(Exception):
     """The artifact could not be read or parsed. Distinct from being invalid."""
 
 
+class CapabilityError(LoadError):
+    """This build cannot read the artifact — a missing optional dependency.
+
+    A subclass of `LoadError` so every existing catch site keeps working, but
+    distinguishable, because the two facts differ in the only way that matters:
+    a malformed artifact is a **finding**, while a reader this build does not
+    have means the check **did not run**. `mfc conformance` reports the second
+    as `not_run` rather than failing a file it never managed to look at.
+    """
+
+
 def schema_path_for(version: str) -> Path:
     """`emission/1.0` -> `schema/emission-1.0.schema.json`."""
     if "/" not in version:
@@ -57,7 +68,7 @@ def load_artifact(path: Path) -> Any:
         try:
             import yaml  # noqa: PLC0415 - optional dependency, imported on demand
         except ImportError as exc:  # pragma: no cover - depends on environment
-            raise LoadError(
+            raise CapabilityError(
                 f"{path.name} is YAML but PyYAML is not installed; "
                 f"install the 'yaml' extra (pip install 'mfc[yaml]')"
             ) from exc

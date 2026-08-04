@@ -1,6 +1,11 @@
 """The `mfc` command line.
 
-Subcommands land as the contract does. Today: `lint-schemas`.
+Subcommands land as the contract does. Today: `lint-schemas`, `validate`,
+`bundle`, `lint`, `conformance`.
+
+`lint` and `conformance` share `_report`, so a rule table means the same thing
+in both: `ok` / `FAIL` / `not_run`, with the `not_run` names printed every time
+and never folded into the count.
 
 Exit codes are the contract with CI and are fixed:
 
@@ -21,6 +26,8 @@ import sys
 from pathlib import Path
 
 from .bundle import BundleError, build_declarations, dumps
+from .conformance import check as conformance_check
+from .conformance import evidence_table, gather
 from .lint import FORBIDDEN_PROPERTY_NAMES, lint_schema
 from .rules import Status, check, summarize
 from .validate import (
@@ -274,7 +281,16 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
     closed_lanes = lanes_doc.get("closed_lanes") if isinstance(lanes_doc, dict) else None
     results = check(emission, environment, registry=registry, closed_lanes=closed_lanes)
+    return _report(results, args.require_all)
 
+
+def _report(results: list, require_all: bool) -> int:
+    """Print a rule table and derive the exit code. Shared by lint and conformance.
+
+    The `not_run` note is printed on every invocation and never folded into the
+    count, in both commands, because the misreading it guards against is the
+    same one: a green run with a rule that never executed.
+    """
     for r in results:
         mark = {Status.PASS: "ok", Status.FAIL: "FAIL", Status.NOT_RUN: "not_run"}[r.status]
         print(f"{mark:>7}  {r.rule}  {r.title}")
@@ -287,16 +303,72 @@ def cmd_lint(args: argparse.Namespace) -> int:
     print(f"\n{passed} passed, {failed} failed, {not_run} not_run")
 
     if not_run:
-        # Printed every time, never folded into a count. A green lint with a
-        # not_run rule must not be readable as if that rule had passed.
         names = ", ".join(r.rule for r in results if r.status is Status.NOT_RUN)
         print(f"note: {names} did NOT run. This is not a pass -- nothing checked "
               f"what they check.", file=sys.stderr)
-        if args.require_all:
+        if require_all:
             print("error: --require-all and at least one rule did not run",
                   file=sys.stderr)
             return EXIT_FINDINGS
     return EXIT_FINDINGS if failed else EXIT_OK
+
+
+def cmd_conformance(args: argparse.Namespace) -> int:
+    bundle_path = Path(args.bundle)
+    if not bundle_path.is_file():
+        print(f"error: no such bundle: {bundle_path}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        bundle = load_artifact(bundle_path)
+    except (LoadError, OSError) as exc:
+        print(f"error: {bundle_path.name}: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    # The bundle is both the input and the map. A malformed one cannot be
+    # walked, so it is checked against its own schema before anything else.
+    rc = _validate_against(bundle, "bundle/1.0", bundle_path.name)
+    if rc is not None:
+        return rc
+
+    # Predicate paths are repo-relative, so the default root is the directory
+    # the bundle's own directory sits in -- `attest/bundle.json` naming
+    # `attest/build.json` resolves without the caller passing anything.
+    root = Path(args.root) if args.root else bundle_path.resolve().parent.parent
+    if not root.is_dir():
+        print(f"error: no such root directory: {root}", file=sys.stderr)
+        return EXIT_USAGE
+
+    evidence = gather(bundle, root)
+    if not evidence:
+        # A bundle attesting nothing must not pass. Same vacuous-pass guard as
+        # an empty --schema-dir.
+        print("error: the bundle carries no predicates; there is nothing to "
+              "check and this is not a clean run", file=sys.stderr)
+        return EXIT_USAGE
+
+    results = conformance_check(
+        bundle, evidence,
+        emission_path=Path(args.emission) if args.emission else None)
+    rc = _report(results, args.require_all)
+
+    rows = evidence_table(bundle, evidence)
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    print("\nevidence")
+    for r in rows:
+        print("  " + "  ".join(cell.ljust(w) for cell, w in zip(r, widths)).rstrip())
+    independent = sum(1 for r in rows if r.attestation == "independent")
+    elsewhere = sum(1 for r in rows if r.environment.startswith("OTHER"))
+    # Reported as separate facts, never combined into one number. "6 predicates"
+    # must not be readable as "6 measurements of this build by six parties".
+    print(f"\n{len(rows)} predicate(s); {independent} not self-attested; "
+          f"{elsewhere} produced in another environment")
+    if bundle.get("unrecognized_predicates"):
+        kinds = ", ".join(sorted({p["predicateType"] for p
+                                  in bundle["unrecognized_predicates"]}))
+        print(f"note: {len(bundle['unrecognized_predicates'])} predicate(s) were "
+              f"ingested but not understood by this build ({kinds}). Their "
+              f"contents were NOT checked.", file=sys.stderr)
+    return rc
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -354,6 +426,22 @@ def build_parser() -> argparse.ArgumentParser:
     lnt.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     lnt.set_defaults(func=cmd_lint)
+
+    con = sub.add_parser(
+        "conformance",
+        help="run the C-01..C-12 rules over the set of artifacts a bundle names",
+        description="Asks whether seven individually valid artifacts describe "
+                    "the SAME thing. Writes no artifact: the output is a report "
+                    "and an exit code, because a conformance.json with a verdict "
+                    "in it would be the aggregate-verdict rejection fixture.",
+    )
+    con.add_argument("--bundle", required=True, help="path to bundle.json")
+    con.add_argument("--root", help="directory predicate file[] paths are "
+                                    "relative to (default: the bundle's parent's parent)")
+    con.add_argument("--emission", help="path to lean-emission.json; enables C-11")
+    con.add_argument("--require-all", dest="require_all", action="store_true",
+                     help="treat any not_run rule as a failure")
+    con.set_defaults(func=cmd_conformance)
 
     return parser
 

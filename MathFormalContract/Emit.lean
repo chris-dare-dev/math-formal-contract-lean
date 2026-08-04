@@ -89,6 +89,19 @@ so an unpinned width silently rotates every downstream statement digest on a
 toolchain that changes its default. `mfc` additionally whitespace-normalizes
 before hashing; this is belt and braces.
 
+`pp.proofs` **must** be `true`, and its default is `false`. With the default,
+every proof subterm prints as `⋯` — and `value_pp` is emitted for `def` and
+`opaque`, where `statement_digest` *hashes it*. So the default was deleting
+content from a digest input: two defs differing only inside an elided proof
+would hash identically. Measured on this package's own emission, 13 of 150
+constants came out elided, every one of them a compiler-generated `def`
+(`.noConfusion`, `.elim`, `._sparseCasesOn_N`) whose body carries proofs.
+
+`mfc lint` rule `E-07` is what found it, which is the arrangement working:
+the rule states the property, the emitter has to satisfy it. Probed one option
+at a time rather than assumed — `pp.deepTerms` and `pp.maxSteps` change nothing
+here; `pp.proofs` accounts for all five elisions in the sample.
+
 Ambient options are *discarded* rather than extended, so a `set_option` in the
 caller cannot reach the emitted text. -/
 private def ppOpts : Options :=
@@ -100,6 +113,7 @@ private def ppOpts : Options :=
     |>.setBool `pp.universes true
     |>.setBool `pp.explicit  false
     |>.setBool `pp.notation  true
+    |>.setBool `pp.proofs    true
     |>.set     `format.width (120 : Nat)
 
 /-- The same options as data, for the `pp_options` record. Written from one
@@ -110,6 +124,7 @@ private def ppOptsJson : Json :=
     ("pp.universes", Json.bool true),
     ("pp.explicit",  Json.bool false),
     ("pp.notation",  Json.bool true),
+    ("pp.proofs",    Json.bool true),
     ("format.width", Json.num 120)]
 
 /-! ## Timestamps -/

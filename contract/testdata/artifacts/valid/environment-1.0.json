@@ -18,10 +18,38 @@
       "inherited": false
     },
     {
-      "name": "mathlib",
-      "rev": "8a178386ffc0f5fef0b77738bb5449d50efeea95",
-      "url": "https://github.com/leanprover-community/mathlib4",
+      "name": "Cli",
+      "rev": "7802da01beb530bf051ab657443f9cd9bc3e1a29",
+      "url": "https://github.com/leanprover/lean4-cli",
       "input_rev": "v4.29.0",
+      "inherited": true
+    },
+    {
+      "name": "LeanSearchClient",
+      "rev": "c5d5b8fe6e5158def25cd28eb94e4141ad97c843",
+      "url": "https://github.com/leanprover-community/LeanSearchClient",
+      "input_rev": "main",
+      "inherited": true
+    },
+    {
+      "name": "MD4Lean",
+      "rev": "6a3fb240133bcb7e1a066fdc784b3fdc304e3fc5",
+      "url": "https://github.com/acmepjz/md4lean",
+      "input_rev": "main",
+      "inherited": true
+    },
+    {
+      "name": "Qq",
+      "rev": "707efb56d0696634e9e965523a1bbe9ac6ce141d",
+      "url": "https://github.com/leanprover-community/quote4",
+      "input_rev": "master",
+      "inherited": true
+    },
+    {
+      "name": "aesop",
+      "rev": "7152850e7b216a0d409701617721b6e469d34bf6",
+      "url": "https://github.com/leanprover-community/aesop",
+      "input_rev": "master",
       "inherited": true
     },
     {
@@ -30,10 +58,67 @@
       "url": "https://github.com/leanprover-community/batteries",
       "input_rev": "main",
       "inherited": true
+    },
+    {
+      "name": "importGraph",
+      "rev": "48d5698bc464786347c1b0d859b18f938420f060",
+      "url": "https://github.com/leanprover-community/import-graph",
+      "input_rev": "main",
+      "inherited": true
+    },
+    {
+      "name": "informal",
+      "rev": "be2042471694a77eea68089c770de3c9a9245d7c",
+      "url": "https://github.com/mattrobball/lean-informal",
+      "input_rev": "main",
+      "inherited": true
+    },
+    {
+      "name": "mathlib",
+      "rev": "8a178386ffc0f5fef0b77738bb5449d50efeea95",
+      "url": "https://github.com/leanprover-community/mathlib4",
+      "input_rev": "v4.29.0",
+      "inherited": true
+    },
+    {
+      "name": "plausible",
+      "rev": "83e90935a17ca19ebe4b7893c7f7066e266f50d3",
+      "url": "https://github.com/leanprover-community/plausible",
+      "input_rev": "main",
+      "inherited": true
+    },
+    {
+      "name": "proofwidgets",
+      "rev": "3c52dee17f0cd89c1ec14de78920d1bdaa3d26b3",
+      "url": "https://github.com/leanprover-community/ProofWidgets4",
+      "input_rev": "v0.0.95",
+      "inherited": true
+    },
+    {
+      "name": "subverso",
+      "rev": "ce893b9042128037e2d3c0158b9567fab9fae268",
+      "url": "https://github.com/leanprover/subverso",
+      "input_rev": "main",
+      "inherited": true
+    },
+    {
+      "name": "verso",
+      "rev": "7ae82ac2ae54ae5dcc9948a701669e9b596e5cae",
+      "url": "https://github.com/leanprover/verso",
+      "input_rev": "v4.29.0",
+      "inherited": true
     }
   ],
   "input_rev_is_branch": [
-    "batteries"
+    "LeanSearchClient",
+    "MD4Lean",
+    "Qq",
+    "aesop",
+    "batteries",
+    "importGraph",
+    "informal",
+    "plausible",
+    "subverso"
   ],
   "root_package": {
     "name": "BridgelandStabLean",

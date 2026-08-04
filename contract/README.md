@@ -29,7 +29,8 @@ to serve this directory, the named exception in the consuming repo's
 | `mfc/validate.py` | artifact validation |
 | `mfc/bundle.py` | `declarations.json`, everything recomputed |
 | `mfc/rules.py` | the E-01..E-10 content rules |
-| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint` |
+| `mfc/conformance.py` | the C-01..C-12 cross-artifact rules |
+| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance` |
 | `pyproject.toml` | packaging, so a consumer can install it |
 | `testdata/schemas/invalid/` | schemas that must fail the lint |
 | `testdata/artifacts/valid/` | one filled instance per schema |
@@ -140,6 +141,93 @@ cannot hash identically. It also turns out to select exactly the statements
 that cannot be re-elaborated — measured at 339/339 round-trip on elision-free
 statements and 0/61 on elided ones — so it is already the precondition
 `--restate-check` needs.
+
+## `conformance`: seven valid artifacts that do not describe the same thing
+
+`validate` asks whether one artifact is well formed. `lint` asks whether one
+emission contains anything forbidden. Neither can see the failure this command
+exists for — a `build.json` measured before the last commit, a review performed
+against an earlier environment, a `declarations.json` derived from an emission
+other than the one shipped. Each file passes its own schema. The set is still a
+lie.
+
+Twelve rules, all of them a link between two artifacts rather than a property of
+one. `C-02` (a predicate's `sha256` is the file's actual bytes) is the load
+bearer: without it every other link is between things the bundle merely
+asserts. `C-07` is the only rule that checks a digest against the data it
+summarizes rather than against another digest.
+
+### It writes no artifact, and that is the point
+
+The obvious shape is to emit `conformance.json` with a verdict in it. It
+deliberately does not, because there is nowhere honest to put one — a
+`conformance.json` carrying a top-level verdict *is* the `aggregate-verdict`
+rejection fixture, mechanically produced by our own tool.
+
+So the output is a report and an exit code, and the reviewable object is an
+evidence table:
+
+```
+evidence
+  environment                attest/environment.json     mfc/1.0.0                   self-attested  this environment
+  human-review               attest/review.json          human:Chris Dare            independent    this environment
+  corpus-resolution          attest/resolution.json      arxmcp/statement_resolve..  independent    n/a (not a Lean measurement)
+  provisional-self-reported  attest/lean-verify-tran..   arxmcp/lean_verify@v4.31.0  self-attested  OTHER environment (ffffffff...)
+
+6 predicate(s); 2 not self-attested; 1 produced in another environment
+```
+
+Three counts, printed separately and never combined, because "6 predicates"
+must not be readable as "6 independent measurements of this build". No column
+of that table is a score, and `test_no_row_carries_a_verdict` keeps it that way.
+
+### Out-of-environment evidence is labelled, not averaged in
+
+The reference bundle carries a transcript produced by a **v4.31.0** toolchain
+against a repo pinned to **v4.29.0**. That is legitimate and must stay visibly
+separate, which is what the `provisional-self-reported` predicate type is for.
+`C-05` makes the label binding: a `build/v1` predicate carrying a foreign
+`env_digest` is a measurement of another build presented as a measurement of
+this one.
+
+There is one way to satisfy `C-05` without fixing anything — relabel the
+predicate as provisional. That is the intended escape, not a hole: relabelling
+*is* the retraction, and the table then shows a claim demoted to nothing.
+
+### `C-12` and the vacuous pass, one level up
+
+Every other rule checks what is *present*. A bundle that simply omits its
+`build/v1` predicate therefore satisfies all eleven and reports "5
+predicate(s)". `C-12` is the only rule that can see an absence, and
+`test_c12_a_bundle_that_simply_omits_its_build_predicate` asserts that no other
+rule notices — which is why it exists.
+
+### Not yet in this repo's CI, and why that is stated rather than faked
+
+CI here produces an emission and a `declarations.json`. Nothing assembles a
+`bundle.json`, and there is no `environment.json` or `build.json`, so there is
+nothing for `conformance` to run against. A CI step pointed at a file no step
+produces would fail for the wrong reason; a step that tolerated its absence
+would be the vacuous pass. It runs in pytest against a generated coherent tree
+until a bundle exists.
+
+### The fixture tree is built, not checked in
+
+`C-02` compares a predicate's `sha256` to real bytes, so a checked-in `attest/`
+tree would need its digests hand-maintained on every edit. The cost of
+generating it is that a generator and a checker sharing a misconception agree
+with each other — which is what the mutation tests are for. Each takes the
+coherent tree, breaks exactly one link, and requires the matching rule to
+notice.
+
+Building that tree found a real defect in a checked-in fixture. `C-07`
+recomputes the environment digest from the environment's own fields, and
+`environment-1.0.json` declared a digest computed over **fourteen** packages
+while listing **three** — the design note's instance, trimmed for readability,
+with the real digest left in place. Rebuilt truthfully from the consuming
+repo's `lake-manifest.json`, which also makes `digest.py`'s "nine of the
+fourteen packages carry `inputRev` `main` or `master`" checkable against the
+fixture instead of only asserted in prose.
 
 ## `bundle` recomputes; it does not carry anything across
 

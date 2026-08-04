@@ -3,6 +3,7 @@
   "root_lib": "MathFormalContractTest",
   "pp_options": {
     "pp.universes": true,
+    "pp.proofs": true,
     "pp.notation": true,
     "pp.fullNames": true,
     "pp.explicit": false,
