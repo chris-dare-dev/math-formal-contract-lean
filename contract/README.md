@@ -24,9 +24,11 @@ to serve this directory, the named exception in the consuming repo's
 | path | what |
 |---|---|
 | `mfc/schema/*.schema.json` | **all seven** artifact formats |
+| `mfc/digest.py` | the four canonical digest functions — **frozen** |
 | `mfc/lint.py` | the banned-property lint |
 | `mfc/validate.py` | artifact validation |
-| `mfc/cli.py` | `mfc lint-schemas`, `mfc validate` |
+| `mfc/bundle.py` | `declarations.json`, everything recomputed |
+| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle` |
 | `pyproject.toml` | packaging, so a consumer can install it |
 | `testdata/schemas/invalid/` | schemas that must fail the lint |
 | `testdata/artifacts/valid/` | one filled instance per schema |
@@ -102,6 +104,47 @@ Two placement notes, both deliberate:
   stable, greppable path for any non-Python consumer.
 
 Neither adds a Lake dependency, so the zero-dependency invariant is untouched.
+
+## `bundle` recomputes; it does not carry anything across
+
+The emission is produced by the topic repo's own emitter in the topic repo's
+own build. It is an **input**, not a source of truth. So `axioms` is re-sorted
+and re-deduped, `contains_sorry_ax` is recomputed from that list, `counts` are
+recounted from `constants[]`, and `axioms_disallowed` is derived from the
+environment's `axiom_policy` — a field the emission deliberately does not
+report at all, so there is no value to disagree with.
+
+This is not suspicion of the emitter. It is that a producer reporting its own
+verdict has one failure mode no amount of care removes, and the contract exists
+to keep that failure mode out. There is no code path here that emits a clean
+`axioms_disallowed` for a declaration whose axioms contain `sorryAx`.
+
+Both inputs are validated **before** anything is derived from them, and the
+output is validated **before** it is written — `mfc` must not be able to emit
+an artifact its own schema rejects.
+
+## Digests are pinned by data, not by agreement with ourselves
+
+`digest.py` is frozen: any change is a MAJOR bump on every artifact carrying a
+digest. `tests/test_digest.py` reproduces the three values the design note
+recorded as `[COMPUTED]` against the real repository at `f166a3d` — the
+`env_digest` and both statement digests — so a refactor that changes key order,
+separators, or the NFC-then-collapse order fails immediately.
+
+That matters more here than usual. The fixture corpus lives inside one of the
+implementations it referees, so "our code agrees with our code" proves nothing;
+agreement with values computed before this code existed does. It is red-team
+gap 16's mitigation.
+
+The properties those digests encode, each with its own test:
+
+* a **def's body is part of its statement** — two defs with one type and
+  different bodies are different claims;
+* a **theorem's proof is not** — folding it in would make every proof edit read
+  as a statement change, destroying the signal review depends on;
+* a **rename does not rotate** anything — citations anchor to a registry key;
+* **re-wrapping does not rotate** anything — `type_pp` carries hard line breaks
+  at the pinned `format.width`.
 
 ## `validate`, and why it does not take a `--schema`
 

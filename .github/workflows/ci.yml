@@ -125,6 +125,19 @@ jobs:
           lake exe mfc_emit_self --out attest/lean-emission.json
           lake exe mfc_emit_selftest --out attest/test-emission.json
 
+      # Bundle the REAL emission, not a fixture. This is the only place the
+      # emitter and the contract tooling meet, and the statement digests are
+      # computed over actual measured type_pp -- a fixture cannot prove that.
+      - name: mfc bundle over the real emission
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet './contract'
+          mfc bundle \
+            --emission attest/lean-emission.json \
+            --environment contract/testdata/artifacts/valid/environment-1.0.json \
+            --out attest/declarations.json
+          mfc validate attest/declarations.json
+
       - name: the emission is not vacuous
         run: |
           set -euo pipefail

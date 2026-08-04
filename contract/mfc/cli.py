@@ -20,6 +20,7 @@ import json
 import sys
 from pathlib import Path
 
+from .bundle import BundleError, build_declarations, dumps
 from .lint import FORBIDDEN_PROPERTY_NAMES, lint_schema
 from .validate import (
     LoadError,
@@ -163,6 +164,92 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _validate_against(document: object, version: str, label: str) -> int | None:
+    """Validate `document` against the schema `version` names. None if clean."""
+    try:
+        schema_path = schema_path_for(version)
+    except LoadError as exc:
+        print(f"error: {label}: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    if not schema_path.is_file():
+        print(f"error: {label}: unsupported contract version {version!r}", file=sys.stderr)
+        return EXIT_USAGE
+    schema_doc, problem = _load(schema_path)
+    if problem is not None:
+        print(f"error: {schema_path.name}: {problem}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        problems = validate_artifact(document, schema_doc)
+    except LoadError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    if problems:
+        for pr in problems:
+            print(f"{label}: {pr}", file=sys.stderr)
+        print(f"error: {label}: {len(problems)} problem(s) against {schema_path.name}",
+              file=sys.stderr)
+        return EXIT_FINDINGS
+    return None
+
+
+def cmd_bundle(args: argparse.Namespace) -> int:
+    emission_path, env_path = Path(args.emission), Path(args.environment)
+    for p in (emission_path, env_path):
+        if not p.is_file():
+            print(f"error: no such file: {p}", file=sys.stderr)
+            return EXIT_USAGE
+
+    try:
+        emission = load_artifact(emission_path)
+        environment = load_artifact(env_path)
+    except (LoadError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    # Validate the INPUTS before deriving anything from them. Recomputing over
+    # a malformed emission would produce a well-formed declarations.json built
+    # on nonsense, which is worse than failing.
+    for doc, want, label in ((emission, "emission/1.0", emission_path.name),
+                             (environment, "environment/1.0", env_path.name)):
+        if not isinstance(doc, dict) or doc.get("schema_version") != want:
+            print(f"error: {label}: expected schema_version {want!r}, got "
+                  f"{doc.get('schema_version') if isinstance(doc, dict) else type(doc).__name__!r}",
+                  file=sys.stderr)
+            return EXIT_USAGE
+        rc = _validate_against(doc, want, label)
+        if rc is not None:
+            return rc
+
+    try:
+        declarations = build_declarations(emission, environment, emission_path)
+    except BundleError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    # ...and validate the OUTPUT before writing it. mfc must not be able to
+    # emit an artifact that its own schema rejects.
+    rc = _validate_against(declarations, "declarations/1.0", "declarations.json")
+    if rc is not None:
+        return rc
+
+    out = Path(args.out)
+    if out.parent and not out.parent.is_dir():
+        out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(dumps(declarations), encoding="utf-8")
+
+    c = declarations["counts"]
+    sorries = sum(1 for d in declarations["declarations"] if d["contains_sorry_ax"])
+    disallowed = sum(1 for d in declarations["declarations"] if d["axioms_disallowed"])
+    print(f"ok: wrote {out} -- {c['total']} declarations "
+          f"({c['in_scope']} in scope, {c['cited']} cited)")
+    if sorries or disallowed:
+        # Reported, not fatal. The artifact must exist and be honest even when
+        # -- especially when -- the answer is bad; `mfc lint` is the gate.
+        print(f"note: {sorries} declaration(s) depend on sorryAx, "
+              f"{disallowed} carry a disallowed axiom", file=sys.stderr)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfc",
@@ -191,6 +278,17 @@ def build_parser() -> argparse.ArgumentParser:
              "normally inferred from the artifact's own schema_version)",
     )
     val.set_defaults(func=cmd_validate)
+
+    bun = sub.add_parser(
+        "bundle",
+        help="build declarations.json from an emission and an environment",
+        description="Recomputes every field rather than carrying it across "
+                    "from the emission. Validates both inputs and the output.",
+    )
+    bun.add_argument("--emission", required=True, help="path to lean-emission.json")
+    bun.add_argument("--environment", required=True, help="path to environment.json")
+    bun.add_argument("--out", required=True, help="where to write declarations.json")
+    bun.set_defaults(func=cmd_bundle)
 
     return parser
 
