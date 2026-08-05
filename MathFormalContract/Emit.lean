@@ -361,7 +361,25 @@ private unsafe def emitToFileImpl (rootLib : Name) (leanOptions : List (String �
   let env ← importModules #[{ module := rootLib }] {}
     (trustLevel := 0) (loadExts := true)
   let emittedAt ← isoUtcNow
-  let ctx : Core.Context := { fileName := "<mfc-emit>", fileMap := default, options := {} }
+  -- `maxHeartbeats := 0`, i.e. unlimited, and it is not laziness.
+  --
+  -- The default 200000 is a guard against runaway ELABORATION — a proof that
+  -- will not terminate. Nothing here elaborates: the sweep reads constants
+  -- already in the environment and delaborates their types for `type_pp`. A
+  -- Mathlib-scale library legitimately exceeds the default while doing exactly
+  -- what it is supposed to, and measured against BridgelandStabLean it does:
+  -- `(deterministic) timeout at delab` before the artifact is written.
+  --
+  -- The alternative is worse than slow. `emitToFileImpl` catches the timeout
+  -- and returns 2 without writing, so a heartbeat limit here does not truncate
+  -- the emission — it produces NO emission, and the vacuous-pass guard
+  -- (`I-02`) never gets to see the build at all. A budget that turns a
+  -- complete record into no record is not a safety feature.
+  --
+  -- Wall-clock is the caller's control, and CI's, not this option's.
+  let ctx : Core.Context :=
+    { fileName := "<mfc-emit>", fileMap := default, options := {}
+      maxHeartbeats := 0 }
   let coreSt : Core.State := { env }
   let result ← try
       let ((doc, sorryN), _, _) ← (emitJson rootLib leanOptions emittedAt).toIO ctx coreSt
