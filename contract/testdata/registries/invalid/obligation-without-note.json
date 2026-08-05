@@ -44,7 +44,37 @@
       "minted_by": "Chris Dare",
       "supersedes": null,
       "superseded_by": null,
-      "note": null
+      "note": null,
+      "mint_unresolved_reason": null
+    },
+    "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.3": {
+      "kind": "proposition",
+      "title": "Slicings are determined by their phases",
+      "informal": "Informal statement of a lemma minted before any resolver ran.",
+      "source": {
+        "scheme": "arxiv",
+        "id": "math/0212237",
+        "version": "v3",
+        "printed_number": "8.3",
+        "locator": null,
+        "title": "Stability conditions on triangulated categories",
+        "authors": [
+          "Tom Bridgeland"
+        ]
+      },
+      "quote_mode": "verbatim",
+      "quote": "A stability condition on a triangulated category D consists of a group homomorphism Z: K(D) -> C together with full additive subcategories P(f) for each f in R. (Proposition form.)",
+      "quote_norm": "nfc-ws-collapse/1",
+      "quote_sha256": "83d4977e2a88ddae9063f4c0816222b6b8ae518b2f744f6303c1fe25286d1a0d",
+      "mint_resolution": null,
+      "depends_on": [],
+      "frontier": [],
+      "minted_at": "2026-08-04",
+      "minted_by": "Chris Dare",
+      "supersedes": null,
+      "superseded_by": null,
+      "note": null,
+      "mint_unresolved_reason": "No arXMCP instance was running at mint time; this entry has never been matched against a live chunk. Re-run `mfc join --resolution` once a corpus exists."
     },
     "stmt:9f4c1a20b7d3:bridgeland2007.prop-8.1": {
       "kind": "proposition",
@@ -81,7 +111,8 @@
       "minted_by": "Chris Dare",
       "supersedes": null,
       "superseded_by": null,
-      "note": null
+      "note": null,
+      "mint_unresolved_reason": null
     },
     "stmt:9f4c1a20b7d3:obl-stab-action": {
       "kind": "obligation",
@@ -117,7 +148,8 @@
       "minted_by": "Chris Dare",
       "supersedes": null,
       "superseded_by": null,
-      "note": null
+      "note": null,
+      "mint_unresolved_reason": "An obligation names work that is owed; there is no printed statement in the paper for it to match."
     }
   }
 }

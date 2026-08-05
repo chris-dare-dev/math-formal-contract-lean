@@ -38,10 +38,15 @@ FIXTURES = {
     "obligation-without-note": "R-09",
 }
 
+#: Rejected by the schema alone, with no R rule behind them. Listed separately
+#: so `FIXTURES` stays "one fixture per rule" and this file does not pretend a
+#: schema constraint is a rule.
+SCHEMA_ONLY = {"unresolved-without-reason"}
+
 #: The two the schema already forbids, so `mfc registry validate` rejects them
 #: before the rule runs. Kept as rules for a caller that skipped validation, and
 #: listed here so the distinction is asserted rather than assumed.
-SCHEMA_ENFORCED = {"source-arxiv-unversioned", "key-is-chunk-id-shaped"}
+SCHEMA_ENFORCED = {"source-arxiv-unversioned", "key-is-chunk-id-shaped"} | SCHEMA_ONLY
 
 
 def _load(name: str) -> dict:
@@ -73,7 +78,7 @@ def test_the_valid_registry_passes_every_rule() -> None:
 
 def test_every_fixture_is_rejected_by_the_cli_somehow() -> None:
     """Whatever layer catches it, nothing in `invalid/` may exit 0."""
-    for fixture in FIXTURES:
+    for fixture in {*FIXTURES, *SCHEMA_ONLY}:
         rc = main(["registry", "validate", str(BAD_DIR / f"{fixture}.json"),
                    "--frontier-kind-labels", *LABELS])
         assert rc == EXIT_FINDINGS, f"{fixture} exited {rc}"
@@ -230,3 +235,36 @@ def test_cli_validate_passes_the_valid_fixture() -> None:
 def test_cli_require_all_is_findings_without_the_allowlist() -> None:
     assert main(["registry", "validate", str(VALID)]) == EXIT_OK
     assert main(["registry", "validate", str(VALID), "--require-all"]) == EXIT_FINDINGS
+
+
+# --- mint_resolution: optional, but never silently absent ---------------------
+
+def test_an_entry_may_be_minted_before_any_resolver_exists() -> None:
+    """The ordering the design note got wrong.
+
+    `mint_resolution` was schema-REQUIRED and non-empty for every kind but
+    `obligation`, so no entry could be created until a resolver existed — and
+    standing up the resolver is a later migration step. An adopter with no
+    corpus running could not mint their first entry.
+    """
+    doc = _valid()
+    unresolved = [e for e in doc["entries"].values() if e["mint_resolution"] is None]
+    assert unresolved, "the valid fixture no longer demonstrates the case"
+    assert any(e["kind"] != "obligation" for e in unresolved), (
+        "only an obligation is unresolved, so the fixture does not show the "
+        "case #21 is actually about: a real lemma minted with no resolver")
+    assert main(["validate", str(VALID)]) == EXIT_OK
+
+
+def test_an_unresolved_entry_must_say_why() -> None:
+    """Absence with no reason is the not_run-as-pass shape, one level down:
+    'nobody asked the corpus' and 'the corpus had no answer' are different
+    facts and neither may present as 'matched'."""
+    assert main(["validate", str(BAD_DIR / "unresolved-without-reason.json")]) \
+        == EXIT_FINDINGS
+
+
+def test_a_resolved_entry_needs_no_reason() -> None:
+    doc = _valid()
+    resolved = [e for e in doc["entries"].values() if e["mint_resolution"]]
+    assert resolved and all(e["mint_unresolved_reason"] is None for e in resolved)

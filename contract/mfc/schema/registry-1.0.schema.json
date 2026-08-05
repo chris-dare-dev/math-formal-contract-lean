@@ -275,21 +275,22 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "kind",
-        "title",
-        "informal",
-        "source",
-        "quote_mode",
-        "quote",
-        "quote_norm",
-        "quote_sha256",
-        "mint_resolution",
         "depends_on",
         "frontier",
+        "informal",
+        "kind",
+        "mint_resolution",
+        "mint_unresolved_reason",
         "minted_at",
         "minted_by",
+        "quote",
+        "quote_mode",
+        "quote_norm",
+        "quote_sha256",
+        "source",
+        "superseded_by",
         "supersedes",
-        "superseded_by"
+        "title"
       ],
       "properties": {
         "kind": {
@@ -426,6 +427,15 @@
             "string",
             "null"
           ]
+        },
+        "mint_unresolved_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 512,
+          "$comment": "REQUIRED when mint_resolution is null. An entry that never matched a live chunk is legitimate -- an adopter with no corpus running, or an obligation with nothing to match -- but it must say which. A silent null is indistinguishable from a resolver that was never wired up."
         }
       },
       "allOf": [
@@ -458,24 +468,26 @@
           }
         },
         {
-          "$comment": "Only an obligation may lack a mint_resolution. Every other kind must have matched a live chunk at least once.",
+          "$comment": "A null mint_resolution must be explained. This is the schema half of the not_run discipline: 'nobody asked the corpus' and 'the corpus had no answer' are different facts, and neither may present as 'matched'.",
           "if": {
-            "not": {
-              "properties": {
-                "kind": {
-                  "const": "obligation"
-                }
-              }
-            }
-          },
-          "then": {
             "properties": {
               "mint_resolution": {
-                "$ref": "#/$defs/mintResolution"
+                "type": "null"
               }
             },
             "required": [
               "mint_resolution"
+            ]
+          },
+          "then": {
+            "properties": {
+              "mint_unresolved_reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "mint_unresolved_reason"
             ]
           }
         }

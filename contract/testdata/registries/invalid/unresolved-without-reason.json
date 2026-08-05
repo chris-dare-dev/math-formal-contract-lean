@@ -30,9 +30,7 @@
         "corpus_version": 5048,
         "observed_at": "2026-08-04T08:55:10Z"
       },
-      "depends_on": [
-        "stmt:9f4c1a20b7d3:bridgeland2007.prop-8.1"
-      ],
+      "depends_on": [],
       "frontier": [
         {
           "id": "gltilde-universal-cover",
@@ -151,7 +149,7 @@
       "supersedes": null,
       "superseded_by": null,
       "note": "Owed: no declaration yet asserts freeness. Blocked on the GLTilde fibre identification.",
-      "mint_unresolved_reason": "An obligation names work that is owed; there is no printed statement in the paper for it to match."
+      "mint_unresolved_reason": null
     }
   }
 }

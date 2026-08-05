@@ -489,6 +489,24 @@ stronger arrangement, the rules stay as backstops for a caller that skipped
 validation, and `SCHEMA_ENFORCED` in the tests asserts *which layer catches
 which* rather than letting a fixture pass the suite while proving nothing.
 
+### One thing the transcription got wrong, and the fix
+
+Transcribing the note faithfully preserved a defect the note's own issue (#21)
+had already identified: `mint_resolution` was schema-**required** and non-empty
+for every kind but `obligation`, so **no entry could be minted until a resolver
+existed** — and standing up the resolver is a later migration step. An adopter
+with no corpus running could not create their first entry.
+
+Relaxed as the issue asks, to optional-with-reason: any kind may carry
+`mint_resolution: null`, and a null **must** carry `mint_unresolved_reason`.
+That is the `not_run` discipline one level down — *nobody asked the corpus* and
+*the corpus had no answer* are different facts, and neither may present as
+*matched*. Expressible in JSON Schema, so it is structural rather than an
+`R` rule, and it has a rejection fixture like everything else.
+
+Amended in `registry/1.0` rather than minted as `1.1`: the schema landed in the
+same session and nothing consumes it yet.
+
 ### The fixtures carry no marker key
 
 Unlike `artifacts/invalid/`, the registry rejection fixtures have no
