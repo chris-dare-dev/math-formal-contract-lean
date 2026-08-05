@@ -154,7 +154,7 @@ jobs:
           # passing one in a green run.
           MFC_REQUIRE_LAKE: "1"
         run: |
-          pip install './contract'
+          pip install './contract' pytest
           python -m pytest contract/tests/test_scaffold.py -q
 
       - name: mfc check-ilean-coverage (the vacuous-pass guard, #31)
