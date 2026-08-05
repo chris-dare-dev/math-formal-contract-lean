@@ -1,0 +1,21 @@
+{
+  "schema_version": "review/1.0",
+  "reviews": [
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2",
+      "decl": "BridgelandStabLean.GroupAction.preMulAction",
+      "reviewer": {
+        "name": "Chris Dare",
+        "email": "chris.dare.bak@gmail.com"
+      },
+      "reviewed_at": "2026-08-11",
+      "reviewed_statement_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "reviewed_quote_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "reviewed_env_digest": "9a1f0e2d7c4b6a58e3f1d0c9b8a7f6e5d4c3b2a1908f7e6d5c4b3a2918070f6e",
+      "faithfulness": "adequate",
+      "relation_confirmed": "exact",
+      "divergences": [],
+      "note": "Reviewed against an environment that is NOT the one in testdata/artifacts/valid/environment-1.0.json. Every field here is well formed and carries the strongest pair the vocabulary has -- adequate/exact -- which is the point: nothing about this document is malformed, so nothing but the env_digest comparison can stop it reading as a pass."
+    }
+  ]
+}

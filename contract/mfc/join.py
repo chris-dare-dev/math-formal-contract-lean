@@ -65,6 +65,23 @@ WORKQUEUE_BLOCKER = (
 #: fact with one name everywhere in this package.
 NOT_RUN = "not_run"
 
+#: Printed when someone DID look -- but at a different environment.
+#:
+#: Kept apart from `not_run` because the remedies differ: `not_run` is closed by
+#: doing a review, `not_applicable` by re-reviewing against this environment, and
+#: an operator who cannot tell them apart cannot plan. It is never `pass` and
+#: never `fail`: a verdict about env Y is not weak evidence about env X, it is no
+#: evidence about env X. That rule is not local taste -- arXMCP's `CLAUDE.md`
+#: §4.10 rule 3 binds it across the seam, and `#20` names this exact fixture as
+#: one that must RENDER this value rather than be rejected.
+#:
+#: `conformance`'s C-10 is a different question and rightly still FAILs: a bundle
+#: that ships a foreign-env review beside this environment is incoherent at the
+#: producer. This is the consumer's question -- given a record I did not build,
+#: what does it tell me about the environment I hold? -- and its answer is
+#: "nothing about this one".
+NOT_APPLICABLE = "not_applicable"
+
 
 class Binding(NamedTuple):
     """One `(key, declaration)` citation binding — the claim table's row key."""
@@ -264,24 +281,55 @@ def claim_table(
     *,
     review: dict | None = None,
     resolution: dict | None = None,
+    environment: dict | None = None,
 ) -> list[Row]:
-    """One row per citation binding, with each axis kept in its own column."""
+    """One row per citation binding, with each axis kept in its own column.
+
+    `environment` is what makes the review columns mean anything. A review
+    carries the `reviewed_env_digest` it was made against; without an
+    environment to compare it to, this function cannot establish that the
+    verdict is about the build the caller is holding, so the review columns
+    render `not_run` -- absent input says so out loud, as everywhere else in
+    this package. Supply it and a foreign-env review renders `not_applicable`.
+
+    Passing no `environment` therefore never renders a verdict. That is the
+    conservative direction on purpose: the failure it forecloses is a review of
+    Lean v4.29 reading as a pass for a table about v4.31, which is silent, and
+    the cost is an operator having to pass `--environment`, which is loud.
+    """
     by_digest_key: dict[tuple[str, str], dict] = {}
     for r in (review or {}).get("reviews", []):
         by_digest_key[(r.get("key"), r.get("reviewed_statement_digest"))] = r
     by_key = {r["key"]: r for r in (resolution or {}).get("results", [])}
+    want = (environment or {}).get("env_digest")
+
+    def review_cells(rev: dict | None) -> tuple[str, str]:
+        """`(faithfulness, relation_confirmed)` for one row, applicability first.
+
+        Order matters. Applicability is decided BEFORE the verdict is read, so
+        there is no code path on which a foreign verdict is fetched and then
+        overwritten -- the value simply never leaves the record.
+        """
+        if review is None or rev is None:
+            return NOT_RUN, NOT_RUN
+        if want is None:
+            return NOT_RUN, NOT_RUN
+        if rev.get("reviewed_env_digest") != want:
+            return NOT_APPLICABLE, NOT_APPLICABLE
+        return (rev.get("faithfulness", NOT_RUN),
+                rev.get("relation_confirmed", NOT_RUN))
 
     rows = []
     for b in bindings(declarations):
-        rev = by_digest_key.get((b.key, b.statement_digest))
+        faithfulness, relation_confirmed = review_cells(
+            by_digest_key.get((b.key, b.statement_digest)))
         res = by_key.get(b.key)
         rows.append(Row(
             key=b.key,
             decl=b.decl,
             claimed=b.relation_claimed,
-            faithfulness=(rev or {}).get("faithfulness", NOT_RUN) if review else NOT_RUN,
-            relation_confirmed=(
-                (rev or {}).get("relation_confirmed", NOT_RUN) if review else NOT_RUN),
+            faithfulness=faithfulness,
+            relation_confirmed=relation_confirmed,
             resolution=(res or {}).get("resolution", NOT_RUN) if resolution else NOT_RUN,
             frontier=",".join(b.frontier) or "-",
         ))
@@ -294,6 +342,13 @@ class Coverage(NamedTuple):
     reviewed: int
     resolved: int
     frontier_open: int
+    #: Rows carrying a review of a DIFFERENT environment. Its own count because
+    #: folding it into `reviewed` would restate the soundness hole as a
+    #: statistic, and folding it into the unreviewed remainder would lose the
+    #: fact that a reviewer has already read these -- the cheapest work in the
+    #: queue is re-confirming them, and that is invisible if they read as never
+    #: looked at.
+    review_not_applicable: int
 
 
 def coverage(rows: Iterable[Row]) -> Coverage:
@@ -307,7 +362,10 @@ def coverage(rows: Iterable[Row]) -> Coverage:
     return Coverage(
         bindings=len(rows),
         keys=len({r.key for r in rows}),
-        reviewed=sum(1 for r in rows if r.faithfulness != NOT_RUN),
+        reviewed=sum(1 for r in rows
+                     if r.faithfulness not in (NOT_RUN, NOT_APPLICABLE)),
         resolved=sum(1 for r in rows if r.resolution != NOT_RUN),
         frontier_open=sum(1 for r in rows if r.frontier != "-"),
+        review_not_applicable=sum(1 for r in rows
+                                  if r.faithfulness == NOT_APPLICABLE),
     )

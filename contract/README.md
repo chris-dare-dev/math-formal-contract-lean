@@ -267,6 +267,44 @@ Run against this repo's own test emission it reports, correctly:
 Nothing here is reviewed or resolved, and the output says so rather than
 looking clean.
 
+### A verdict about another environment is not a weak verdict about this one
+
+The digest join answers *which statement was reviewed*. It says nothing about
+*which environment the reviewer was looking at* — and a review of Lean v4.29 is
+no evidence at all about a v4.31 build. That skew is not hypothetical: it is the
+standing gap between this repo's pin and the one arXMCP's REPL runs.
+
+So `join` takes `--environment`, and a review whose `reviewed_env_digest`
+disagrees with it renders `not_applicable`:
+
+```
+  key                                       decl       claimed  faithful        confirmed       resolved  frontier
+  stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2  Topic.thm  exact    not_applicable  not_applicable  not_run   -
+
+1 binding(s) over 1 key(s); 0 reviewed; 0 resolved; 0 with an open frontier; 1 reviewed against another environment
+```
+
+Three things about that line are deliberate:
+
+- **It is a rendering, not a finding.** Exit code stays `0`. Being handed a
+  record built elsewhere is legitimate; the only correct response is to say it
+  does not apply here. `conformance`'s **C-10 still FAILs** the same document,
+  and that is not a contradiction — C-10 asks whether the *producer* assembled a
+  coherent bundle, and one shipping a foreign-env review beside this environment
+  is incoherent. Producer and consumer are different questions.
+- **`not_applicable` is counted on its own**, never folded into `reviewed` (that
+  would restate the hole as a statistic) and never into the unreviewed remainder
+  (that would lose the fact that a human has already read these — the cheapest
+  work in the queue).
+- **Without `--environment`, review columns read `not_run`**, and `join` says on
+  stderr why. Applicability cannot be established, so the axis does not claim it
+  was. Rendering the verdict instead would reintroduce exactly the silent pass
+  this section exists to close; the cost of the other direction is an operator
+  passing one more flag, which is loud and recoverable.
+
+`not_applicable` is never `pass` and never `fail`. arXMCP's `CLAUDE.md` §4.10
+rule 3 binds the same rule from the other side of the seam.
+
 ### Reviews join by digest, because a name-keyed join fails silently
 
 `review.decl` records a Lean name. Joining on it breaks under a rename: the

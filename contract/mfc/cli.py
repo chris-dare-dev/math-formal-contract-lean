@@ -391,7 +391,7 @@ def cmd_conformance(args: argparse.Namespace) -> int:
 
 def cmd_join(args: argparse.Namespace) -> int:
     paths = {"declarations": Path(args.declarations)}
-    for name in ("review", "resolution", "registry"):
+    for name in ("review", "resolution", "registry", "environment"):
         if getattr(args, name):
             paths[name] = Path(getattr(args, name))
     for label, p in paths.items():
@@ -413,7 +413,8 @@ def cmd_join(args: argparse.Namespace) -> int:
     for label, version in (("declarations", "declarations/1.0"),
                            ("review", "review/1.0"),
                            ("resolution", "resolution/1.0"),
-                           ("registry", "registry/1.0")):
+                           ("registry", "registry/1.0"),
+                           ("environment", "environment/1.0")):
         if label in docs:
             rc = _validate_against(docs[label], version, paths[label].name)
             if rc is not None:
@@ -425,7 +426,16 @@ def cmd_join(args: argparse.Namespace) -> int:
     rc = _report(results, args.require_all)
 
     rows = claim_table(docs["declarations"], review=docs.get("review"),
-                       resolution=docs.get("resolution"))
+                       resolution=docs.get("resolution"),
+                       environment=docs.get("environment"))
+    if "review" in docs and "environment" not in docs:
+        # Not a finding -- the table already says not_run in every review cell.
+        # This says WHY, because "nobody reviewed" and "I was not told which
+        # environment to judge the reviews against" are different problems and
+        # the cell spells them the same.
+        print("\nnote: --review supplied without --environment, so no review "
+              "verdict can be shown to be about this build; review columns "
+              "read not_run", file=sys.stderr)
     if rows:
         header = ("key", "decl", "claimed", "faithful", "confirmed", "resolved",
                   "frontier")
@@ -436,11 +446,14 @@ def cmd_join(args: argparse.Namespace) -> int:
             print("  " + "  ".join(str(c).ljust(w)
                                    for c, w in zip(r, widths)).rstrip())
         c = coverage(rows)
-        # Five separate facts. Never a ratio and never one number: "reviewed"
-        # and "resolved" are different questions about different rows.
+        # Separate facts. Never a ratio and never one number: "reviewed" and
+        # "resolved" are different questions about different rows, and
+        # not_applicable is a third that must not be folded into either.
+        na = (f"; {c.review_not_applicable} reviewed against another environment"
+              if c.review_not_applicable else "")
         print(f"\n{c.bindings} binding(s) over {c.keys} key(s); "
               f"{c.reviewed} reviewed; {c.resolved} resolved; "
-              f"{c.frontier_open} with an open frontier")
+              f"{c.frontier_open} with an open frontier{na}")
     else:
         # Zero bindings is not a clean join. It is what a declarations.json
         # built from a mis-scoped emission looks like.
@@ -665,6 +678,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     joi.add_argument("--declarations", required=True, help="path to declarations.json")
     joi.add_argument("--review", help="path to review.yaml/json; enables J-01..J-03")
+    joi.add_argument("--environment", help="path to environment.json; without it "
+                                           "no review verdict can be shown to be "
+                                           "about this build, so the review "
+                                           "columns read not_run")
     joi.add_argument("--resolution", help="path to resolution.json; enables J-04, J-05")
     joi.add_argument("--registry", help="path to the registry; enables J-06 "
                                         "(no registry schema exists yet)")

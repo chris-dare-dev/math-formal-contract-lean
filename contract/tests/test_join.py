@@ -15,17 +15,22 @@ from pathlib import Path
 import pytest
 
 from contract.mfc.cli import EXIT_FINDINGS, EXIT_OK, EXIT_USAGE, main
-from contract.mfc.join import NOT_RUN, claim_table, coverage
+from contract.mfc.join import NOT_APPLICABLE, NOT_RUN, claim_table, coverage
 from contract.mfc.join import check as join_check
 from contract.mfc.rules import Status
 
 HERE = Path(__file__).resolve().parent
 VALID_DIR = HERE.parent / "testdata" / "artifacts" / "valid"
+REVIEW_DIR = HERE.parent / "testdata" / "reviews"
 
 KEY_A = "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2"
 KEY_B = "stmt:9f4c1a20b7d3:bridgeland2007.prop-8.1"
 DIGEST_A = "a" * 64
 DIGEST_B = "b" * 64
+
+#: What `_one_review` attests against. The claim table renders a verdict only
+#: when the environment it is handed agrees with this.
+ENV_DIGEST = "d" * 64
 
 
 def _decl(name: str, digest: str, cites: list[dict]) -> dict:
@@ -68,6 +73,12 @@ def _one_review(key: str, decl: str, digest: str, *,
         "faithfulness": faithfulness, "relation_confirmed": relation,
         "divergences": [], "note": None,
     }
+
+
+def _environment(digest: str = ENV_DIGEST) -> dict:
+    base = json.loads((VALID_DIR / "environment-1.0.json").read_text(encoding="utf-8"))
+    base["env_digest"] = digest
+    return base
 
 
 def _resolution(*results: dict) -> dict:
@@ -122,7 +133,7 @@ def test_a_renamed_declaration_keeps_its_review() -> None:
     review = _review(_one_review(KEY_A, "Topic.oldName", DIGEST_A))
     statuses = _run(declarations=decls, review=review)
     assert statuses["J-01"] is Status.PASS
-    rows = claim_table(decls, review=review)
+    rows = claim_table(decls, review=review, environment=_environment())
     assert rows[0].faithfulness == "adequate", "the review was lost on rename"
 
 
@@ -232,6 +243,108 @@ def test_an_absent_axis_prints_not_run_rather_than_blank() -> None:
     assert row.resolution == NOT_RUN
 
 
+# --- applicability: a verdict about another environment is about another
+# --- environment -----------------------------------------------------------
+
+def test_a_foreign_env_review_renders_not_applicable_not_a_verdict() -> None:
+    """The `foreign-env-attestation` case, from the shipped fixture.
+
+    arXMCP's CLAUDE.md 4.10 rule 3 binds this across the seam: an axis whose
+    environment digest differs from the record's renders `not_applicable` --
+    never a pass, never a fail. Before this existed the claim table joined on
+    `(key, statement_digest)` alone, so a review made against Lean v4.29
+    rendered its verdict verbatim in a table about v4.31.
+
+    The fixture attests `adequate`/`exact` -- the strongest pair in the
+    vocabulary -- precisely so that a regression here is loud.
+    """
+    review = json.loads((REVIEW_DIR / "foreign-env-attestation.json")
+                        .read_text(encoding="utf-8"))
+    attested = review["reviews"][0]
+    decls = _declarations([_decl(attested["decl"],
+                                 attested["reviewed_statement_digest"],
+                                 [_cite(attested["key"], "exact")])])
+
+    (row,) = claim_table(decls, review=review,
+                         environment=_environment("f" * 64))
+
+    assert row.faithfulness == NOT_APPLICABLE
+    assert row.relation_confirmed == NOT_APPLICABLE
+    assert attested["faithfulness"] != row.faithfulness, "the verdict leaked"
+    assert attested["relation_confirmed"] != row.relation_confirmed
+
+
+def test_the_same_review_renders_its_verdict_in_its_own_environment() -> None:
+    """The control. Without it the test above passes on a table that renders
+    `not_applicable` unconditionally, which would be sound and useless."""
+    review = json.loads((REVIEW_DIR / "foreign-env-attestation.json")
+                        .read_text(encoding="utf-8"))
+    attested = review["reviews"][0]
+    decls = _declarations([_decl(attested["decl"],
+                                 attested["reviewed_statement_digest"],
+                                 [_cite(attested["key"], "exact")])])
+
+    (row,) = claim_table(
+        decls, review=review,
+        environment=_environment(attested["reviewed_env_digest"]))
+
+    assert row.faithfulness == attested["faithfulness"] == "adequate"
+    assert row.relation_confirmed == attested["relation_confirmed"] == "exact"
+
+
+def test_not_applicable_is_neither_reviewed_nor_folded_into_the_remainder() -> None:
+    """It gets its own count. Folding it into `reviewed` restates the hole as a
+    statistic; folding it into the unreviewed remainder loses that a human has
+    already read these, which is what makes them the cheapest work in the queue.
+    """
+    decls = _declarations([
+        _decl("Topic.a", DIGEST_A, [_cite(KEY_A)]),
+        _decl("Topic.b", DIGEST_B, [_cite(KEY_B)]),
+    ])
+    review = _review(_one_review(KEY_A, "Topic.a", DIGEST_A))
+    c = coverage(claim_table(decls, review=review,
+                             environment=_environment("f" * 64)))
+
+    assert c.reviewed == 0, "a foreign-env review must not count as reviewed"
+    assert c.review_not_applicable == 1
+    assert c.bindings == 2
+
+
+def test_without_an_environment_no_review_verdict_is_rendered() -> None:
+    """Applicability cannot be established, so the axis says so.
+
+    The conservative direction is deliberate. Rendering the verdict here would
+    reintroduce the exact silent pass this module now refuses, and `not_run` is
+    the spelling this package already uses for "the check did not run".
+    """
+    decls, review, _ = _coherent()
+    (row,) = claim_table(decls, review=review)
+    assert row.faithfulness == NOT_RUN
+    assert row.relation_confirmed == NOT_RUN
+
+
+def test_a_foreign_env_review_is_not_a_finding() -> None:
+    """20 is explicit: it must RENDER not_applicable, not be rejected.
+
+    conformance's C-10 fails a bundle that ships a foreign-env review, and that
+    stays right -- it is the producer's incoherence. This is the consumer side,
+    where the same document is a legitimate thing to be handed and the only
+    correct response is to say it does not apply here.
+    """
+    review = json.loads((REVIEW_DIR / "foreign-env-attestation.json")
+                        .read_text(encoding="utf-8"))
+    attested = review["reviews"][0]
+    decls = _declarations([_decl(attested["decl"],
+                                 attested["reviewed_statement_digest"],
+                                 [_cite(attested["key"], "exact")])])
+
+    statuses = {r.rule: r.status
+                for r in join_check(decls, review=review)}
+    assert statuses["J-01"] is Status.PASS
+    assert statuses["J-02"] is Status.PASS
+    assert statuses["J-03"] is Status.PASS
+
+
 def test_no_column_is_a_verdict() -> None:
     decls, review, resolution = _coherent()
     rows = claim_table(decls, review=review, resolution=resolution)
@@ -248,7 +361,8 @@ def test_coverage_keeps_reviewed_and_resolved_apart() -> None:
     c = coverage(claim_table(
         decls,
         review=_review(_one_review(KEY_A, "Topic.a", DIGEST_A)),
-        resolution=_resolution(_result(KEY_B))))
+        resolution=_resolution(_result(KEY_B)),
+        environment=_environment()))
     assert (c.bindings, c.keys, c.reviewed, c.resolved) == (2, 2, 1, 1)
     assert "score" not in c._fields and "ratio" not in c._fields
 
@@ -286,6 +400,44 @@ def test_cli_passes_on_a_coherent_set(tmp_path: Path) -> None:
     assert main(["join", "--declarations", str(p["declarations"]),
                  "--review", str(p["review"]),
                  "--resolution", str(p["resolution"])]) == EXIT_OK
+
+
+def test_the_foreign_env_fixture_is_a_valid_review(tmp_path: Path) -> None:
+    """It must VALIDATE. A fixture rejected at the schema never reaches the
+    behaviour it was written for -- and it carries no marker key, because
+    `additionalProperties: false` would reject the document for the marker
+    rather than for anything under test."""
+    p = tmp_path / "review.json"
+    p.write_text((REVIEW_DIR / "foreign-env-attestation.json")
+                 .read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["validate", str(p)]) == EXIT_OK
+
+
+def test_cli_renders_not_applicable_and_counts_it_separately(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    p = _write(tmp_path)
+    env = tmp_path / "environment.json"
+    env.write_text(json.dumps(_environment("f" * 64), indent=2), encoding="utf-8")
+
+    rc = main(["join", "--declarations", str(p["declarations"]),
+               "--review", str(p["review"]), "--environment", str(env)])
+    out = capsys.readouterr().out
+
+    assert rc == EXIT_OK, "not_applicable is a rendering, never a finding"
+    assert NOT_APPLICABLE in out
+    assert "reviewed against another environment" in out
+
+
+def test_cli_says_why_the_review_columns_are_blank_without_an_environment(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """`not_run` alone cannot distinguish "nobody reviewed" from "I was not
+    told which environment to judge the reviews against"."""
+    p = _write(tmp_path)
+    main(["join", "--declarations", str(p["declarations"]),
+          "--review", str(p["review"])])
+    captured = capsys.readouterr()
+    assert "--review supplied without --environment" in captured.err
+    assert NOT_RUN in captured.out
 
 
 def test_cli_prints_the_claim_table_and_the_five_counts(
