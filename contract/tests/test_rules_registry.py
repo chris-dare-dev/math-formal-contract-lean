@@ -15,12 +15,13 @@ import pytest
 
 from contract.mfc.cli import EXIT_FINDINGS, EXIT_OK, EXIT_USAGE, main
 from contract.mfc.digest import quote_sha256
-from contract.mfc.registry import RegistryShapeError
+from contract.mfc.registry import RegistryShapeError, open_frontier
 from contract.mfc.rules import Status
 from contract.mfc.rules_registry import check, mint_registry_id
 
 HERE = Path(__file__).resolve().parent
 VALID = HERE.parent / "testdata" / "artifacts" / "valid" / "registry-1.0.json"
+TEXTBOOK = HERE.parent / "testdata" / "artifacts" / "valid" / "textbook-source.json"
 BAD_DIR = HERE.parent / "testdata" / "registries" / "invalid"
 LABELS = ["mathlib-gap"]
 
@@ -31,6 +32,7 @@ FIXTURES = {
     "placeholder-quote": "R-03",
     "unknown-key": "R-04",
     "cyclic-depends": "R-04",
+    "axis-without-evidence": "R-04",
     "registry-id-mismatch": "R-05",
     "key-is-chunk-id-shaped": "R-06",
     "asymmetric-supersede": "R-07",
@@ -109,6 +111,80 @@ def test_no_fixture_carries_a_marker_key() -> None:
     """`additionalProperties: false` would reject the marker, not the defect."""
     for path in BAD_DIR.glob("*.json"):
         assert "$comment_fixture" not in json.loads(path.read_text(encoding="utf-8"))
+
+
+# --- the discharge arm of R-04, and why it is not just a third dangling ref ----
+
+def test_r04_catches_a_frontier_discharged_by_a_key_that_does_not_exist() -> None:
+    """`axis-without-evidence`.
+
+    R-04 had three arms -- `supersedes`/`superseded_by`, `depends_on`, and
+    `frontier[].discharged_by.key` -- and until this fixture, NO fixture in the
+    corpus carried a non-null `discharged_by` at all. The arm was written and
+    never executed, which is indistinguishable from not being wired up.
+    """
+    assert _run(_load("axis-without-evidence"))["R-04"] is Status.FAIL
+
+
+def test_a_bogus_discharge_silently_shrinks_the_open_frontier() -> None:
+    """Why this arm is load-bearing rather than tidy.
+
+    `open_frontier` filters on `discharged_by is None`, so writing ANY non-null
+    object there removes the item from the open frontier -- and with it from
+    `mfc join`'s J-06 work-queue rollup and from E-05's reading of whether an
+    `exact` claim has anything outstanding. A dangling discharge key is not a
+    typo in a cross-reference; it is an open obligation laundered into a closed
+    one, and R-04 is the only thing that looks.
+    """
+    doc = _load("axis-without-evidence")
+    (entry,) = doc["entries"].values()
+    (item,) = entry["frontier"]
+
+    assert open_frontier(entry) == [], "precondition: it reads as fully discharged"
+    assert item["discharged_by"]["key"] not in doc["entries"], "and on nothing"
+
+    entry["frontier"][0]["discharged_by"] = None
+    assert open_frontier(entry) == [item["id"]], (
+        "the same item is outstanding once the fabricated discharge is removed, "
+        "so the discharge -- not the item -- is what closed it")
+
+
+# --- a textbook source has no version axis, and that must not be an error ------
+
+def test_a_textbook_entry_validates_and_passes_every_rule() -> None:
+    """`testdata/valid/textbook-source`.
+
+    arXMCP ships two textbook notebooks, so a registry that cannot express one
+    is broken on arrival rather than merely incomplete. The schema already
+    handles it -- `version: null` is required when `scheme == "textbook"`, and
+    the arxiv-only `^v[0-9]+$` requirement must not reach it -- but nothing
+    proved it until now, and every other fixture in the corpus is arXiv.
+    """
+    doc = json.loads(TEXTBOOK.read_text(encoding="utf-8"))
+    (entry,) = doc["entries"].values()
+
+    assert entry["source"]["scheme"] == "textbook"
+    assert entry["source"]["version"] is None
+    assert main(["validate", str(TEXTBOOK)]) == EXIT_OK
+
+    statuses = _run(doc)
+    assert not [r for r, s in statuses.items() if s is Status.FAIL]
+
+
+def test_a_textbook_entry_may_not_smuggle_in_a_version(tmp_path: Path) -> None:
+    """The null is a category error being refused, not a field left blank.
+
+    Written to `tmp_path`, never beside the fixture: `test_validate` globs
+    `artifacts/valid/` and would adopt a stray file as a fixture it must
+    validate, so a failure here would surface as an unrelated test going red.
+    """
+    doc = json.loads(TEXTBOOK.read_text(encoding="utf-8"))
+    (entry,) = doc["entries"].values()
+    entry["source"]["version"] = "v2"
+
+    p = tmp_path / "textbook-versioned.json"
+    p.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    assert main(["validate", str(p)]) == EXIT_FINDINGS
 
 
 # --- the rules that matter most -----------------------------------------------

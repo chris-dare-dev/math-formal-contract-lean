@@ -1,0 +1,36 @@
+{
+  "schema_version": "registry/1.0",
+  "registry_id": "3e7b02c9d514",
+  "notebook_hint": "bridgeland-stability",
+  "entries": {
+    "stmt:3e7b02c9d514:huybrechts-fm.prop-1.3": {
+      "kind": "proposition",
+      "title": "A fully faithful exact functor with a left and right adjoint",
+      "informal": "Informal statement of the criterion for a Fourier-Mukai kernel to induce an equivalence.",
+      "source": {
+        "scheme": "textbook",
+        "id": "huybrechts-fourier-mukai",
+        "version": null,
+        "printed_number": "1.3",
+        "locator": "ch. 1, sec. 1.2",
+        "title": "Fourier-Mukai Transforms in Algebraic Geometry",
+        "authors": [
+          "Daniel Huybrechts"
+        ]
+      },
+      "quote_mode": "verbatim",
+      "quote": "Let F: D -> D' be a fully faithful exact functor between triangulated categories admitting a left and a right adjoint.",
+      "quote_norm": "nfc-ws-collapse/1",
+      "quote_sha256": "3c3e3fbdac8ce9bb05328e489ab793d70f1708f7693da34d88753cb26bfc1ede",
+      "mint_resolution": null,
+      "depends_on": [],
+      "frontier": [],
+      "minted_at": "2026-08-05",
+      "minted_by": "Chris Dare",
+      "supersedes": null,
+      "superseded_by": null,
+      "note": "A textbook source carries NO version axis: there is no v1/v2 to pin, so `version` is null and the schema's arxiv-only version requirement must not reach it. arXMCP ships two textbook notebooks, so a registry that cannot express one is broken on arrival rather than merely incomplete.",
+      "mint_unresolved_reason": "No resolver has been run against a textbook notebook; printed_number plus locator is the durable coordinate here, and quote_sha256 is what a resolver would match on."
+    }
+  }
+}

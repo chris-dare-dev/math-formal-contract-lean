@@ -20,7 +20,7 @@ from pathlib import Path, PurePath, PureWindowsPath
 
 import pytest
 
-from contract.mfc.cli import EXIT_OK, EXIT_USAGE, main
+from contract.mfc.cli import EXIT_FINDINGS, EXIT_OK, EXIT_USAGE, main
 from contract.mfc.scaffold import (
     Answers,
     ScaffoldError,
@@ -33,6 +33,11 @@ from contract.mfc.scaffold import (
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 VALID_DIR = HERE.parent / "testdata" / "artifacts" / "valid"
+LEAN_DIR = HERE.parent / "testdata" / "lean"
+
+#: The library `mfc init --topic analytic-nt` derives. Pinned because the
+#: evasion fixture is copied into it by path.
+LIB = "AnalyticNt"
 
 SHA = "8a178386ffc0f5fef0b77738bb5449d50efeea95"
 SHA2 = "9e48f23a382ba117b63076a33e0e775389fef1ba"
@@ -294,14 +299,67 @@ def _lake_or_skip() -> None:
     pytest.skip("lake is not installed; set MFC_REQUIRE_LAKE=1 to make this fatal")
 
 
-def test_the_generated_repository_survives_the_whole_chain(tmp_path: Path) -> None:
-    """Render, build, emit, and run every check that does not need a registry.
+#: The three forms from `testdata/lean/set-option-evasion.lean`, plus the
+#: ordinary declaration that makes them dangerous rather than merely invisible.
+EVADERS = ("Evasion.sneakyMultiline", "Evasion.sneakySingleLine",
+           "Evasion.sneakyOpenIn")
+COMPANION = "Evasion.harmlessCompanion"
 
-    Mathlib is swapped for a local path require to the contract package: this
-    is about whether the *generated Lean* compiles and emits a schema-valid
-    artifact, and downloading Mathlib would test lake's network code instead.
-    Everything else — the emitter exe, the module scope, the emission, the
-    coverage set-diff — is exactly what an adopter gets.
+
+def test_set_option_evasion_cannot_hide_from_an_environment_sweep(
+        tmp_path: Path) -> None:
+    """#28. The fixture compiles; that is the whole point of it.
+
+    arXMCP's regex-over-source extractor matches neither `set_option … in` nor
+    `open … in`, so such a line increments neither its site count nor its name
+    count and the `sites == len(names)` fail-safe never fires. Beside an
+    ordinary declaration -- which supplies a non-empty name list and defeats the
+    empty-names abstention -- `#print axioms` then audits a set that silently
+    excludes the evaders while the record reads `clean`.
+
+    Sweeping `Environment.constants` has no text to hide in. A JSON fixture
+    asserting the same thing would pass by construction, which is why this one
+    is built.
+    """
+    dest, env = _scaffolded_repo(tmp_path, "set-option-evasion")
+
+    emission = dest / "attest" / "lean-emission.json"
+    emit = subprocess.run(["lake", "exe", "emit", "--out", str(emission)],
+                          cwd=dest, env=env, capture_output=True, text=True,
+                          timeout=600)
+
+    doc = json.loads(emission.read_text(encoding="utf-8"))
+    by_name = {c["name"]: c for c in doc["constants"]}
+
+    missed = [n for n in (*EVADERS, COMPANION) if n not in by_name]
+    assert not missed, f"the sweep missed {missed}; this is the arXMCP hole"
+
+    # Listing the name is half of it. A record that named `sneaky` and reported
+    # a clean axiom closure would be the same failure one layer along, so the
+    # measured closure is what is asserted -- not a derived boolean.
+    for name in EVADERS:
+        assert "sorryAx" in by_name[name]["axioms"], f"{name} reads clean"
+    assert "sorryAx" not in by_name[COMPANION]["axioms"], (
+        "the companion is honest; if it reads sorry-backed the fixture is not "
+        "isolating what it claims to")
+
+    # The artifact is written even so, on purpose -- the record is most useful
+    # exactly when the build is not clean.
+    assert emit.returncode != 0, "a sorry-backed emission must not exit 0"
+    assert emission.is_file()
+
+    # And the emission is not merely descriptive: E-01 turns it into a refusal.
+    assert main(["lint", "--emission", str(emission),
+                 "--environment", str(VALID_DIR / "environment-1.0.json")]) \
+        == EXIT_FINDINGS
+
+
+def _scaffolded_repo(tmp_path: Path, *extra_modules: str) -> tuple[Path, dict[str, str]]:
+    """Render a topic repo, point it at this checkout, and `lake build` it.
+
+    `extra_modules` are module stems copied from `testdata/lean/` into the root
+    library and imported, for tests that need the build to contain something
+    the scaffold does not ship.
     """
     _lake_or_skip()
     dest = tmp_path / "topic"
@@ -314,6 +372,14 @@ def test_the_generated_repository_survives_the_whole_chain(tmp_path: Path) -> No
                         encoding="utf-8")
     shutil.copy(REPO / "lean-toolchain", dest / "lean-toolchain")
 
+    for stem in extra_modules:
+        module = "".join(part.capitalize() for part in stem.split("-"))
+        (dest / LIB / f"{module}.lean").write_text(
+            (LEAN_DIR / f"{stem}.lean").read_text(encoding="utf-8"), encoding="utf-8")
+        root = dest / f"{LIB}.lean"
+        root.write_text(root.read_text(encoding="utf-8")
+                        + f"import {LIB}.{module}\n", encoding="utf-8")
+
     # os.pathsep, not ":" -- on Windows a ":" join fuses the elan entry to the
     # first real PATH entry and takes system32 out with it, so `lake` stops
     # resolving even though _lake_or_skip just found it.
@@ -322,6 +388,19 @@ def test_the_generated_repository_survives_the_whole_chain(tmp_path: Path) -> No
     build = subprocess.run(["lake", "build"], cwd=dest, env=env,
                            capture_output=True, text=True, timeout=600)
     assert build.returncode == 0, f"the generated repository does not build:\n{build.stderr}"
+    return dest, env
+
+
+def test_the_generated_repository_survives_the_whole_chain(tmp_path: Path) -> None:
+    """Render, build, emit, and run every check that does not need a registry.
+
+    Mathlib is swapped for a local path require to the contract package: this
+    is about whether the *generated Lean* compiles and emits a schema-valid
+    artifact, and downloading Mathlib would test lake's network code instead.
+    Everything else — the emitter exe, the module scope, the emission, the
+    coverage set-diff — is exactly what an adopter gets.
+    """
+    dest, env = _scaffolded_repo(tmp_path)
 
     emission = dest / "attest" / "lean-emission.json"
     emit = subprocess.run(["lake", "exe", "emit", "--out", str(emission)],

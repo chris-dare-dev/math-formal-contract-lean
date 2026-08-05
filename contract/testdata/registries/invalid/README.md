@@ -1,7 +1,12 @@
 # Registry rejection fixtures
 
-One per `R` rule, each of which **must** trip the rule it names. A rule with no
-failing case is indistinguishable from a rule that is not wired up.
+At least one per `R` rule, each of which **must** trip the rule it names. A rule
+with no failing case is indistinguishable from a rule that is not wired up.
+
+`R-04` has three, because it has three independent arms — `supersedes` /
+`superseded_by`, `depends_on`, and `frontier[].discharged_by.key` — and a rule
+whose arms are not separately fixtured is only as tested as its best-covered
+one. The third arm went unexercised until `axis-without-evidence` existed.
 
 These carry **no `$comment_fixture` key**, unlike the fixtures under
 `artifacts/invalid/`. `registry-1.0.schema.json` sets
@@ -21,6 +26,7 @@ so a fixture cannot pass the suite while proving nothing.
 | fixture | rule | what it smuggles |
 |---|---|---|
 | `asymmetric-supersede.json` | `R-07` | A one-sided supersession, so the superseded entry still looks current from the other side. |
+| `axis-without-evidence.json` | `R-04` | A frontier item `discharged_by` a key that was never minted. `open_frontier` filters on `discharged_by is None`, so ANY non-null object there removes the item from the open frontier, from `mfc join`'s J-06 rollup, and from E-05's reading of whether an `exact` claim has anything outstanding. Not a broken cross-reference -- an open obligation laundered into a closed one. Until this fixture no document in the corpus carried a non-null `discharged_by` at all, so R-04's discharge arm had never once executed. |
 | `cyclic-depends.json` | `R-04` | A depends_on cycle: nothing can be formalized first, so the plan has no entry point. |
 | `key-is-chunk-id-shaped.json` | `R-06` (schema) | A corpus chunk id pasted in as a key. Chunk ids ROTATE on any re-parse and nothing forwards the old one, so the citation silently stops resolving. |
 | `obligation-without-note.json` | `R-09` | An obligation with nothing saying what is owed -- indistinguishable from a theorem entry nobody got around to. |
