@@ -32,7 +32,8 @@ to serve this directory, the named exception in the consuming repo's
 | `mfc/conformance.py` | the C-01..C-12 cross-artifact rules |
 | `mfc/join.py` | the J-01..J-06 rules and the claim table |
 | `mfc/ilean.py` | the I-01..I-05 coverage rules |
-| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join`, `check-ilean-coverage` |
+| `mfc/scaffold.py` | `mfc init` — the topic-repo templates |
+| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join`, `check-ilean-coverage`, `init` |
 | `pyproject.toml` | packaging, so a consumer can install it |
 | `testdata/schemas/invalid/` | schemas that must fail the lint |
 | `testdata/artifacts/valid/` | one filled instance per schema |
@@ -354,6 +355,63 @@ which is the exact failure the check exists to prevent. They are already
 distinct — `.ilean` carrying declarations while `constants[]` is empty is the
 bug; both empty is a fresh repo; **no `.ilean` at all is exit 2**, because a
 mis-pointed build directory must never be reportable as full coverage.
+
+## `init`: the measure is a green build on run one
+
+The test of this command is not that it writes files. It is that the tree it
+writes **passes the rest of `mfc` with no hand-editing** — because an adopter
+whose first CI run is red learns nothing about their own work, and the most
+likely thing they do next is delete the workflow.
+
+That constraint is sharper than it looks, and it connects directly to the
+`minItems: 1` finding above: an emission over zero declarations is not a
+representable artifact, so **the scaffold has to ship a real Lean
+declaration**. `AnalyticNT/Basic.lean` carries one, with the reason written in
+the file so it does not get tidied away.
+
+`test_the_generated_repository_survives_the_whole_chain` renders a repo,
+`lake build`s it, runs its emitter, and then puts the result through `validate`,
+`lint`, `check-ilean-coverage`, `bundle` and `join`. Mathlib is swapped for a
+local path require, because the question is whether the *generated Lean*
+compiles, not whether Lake can download. Measured on the real thing: builds in
+14 jobs, emits 1 constant, `lint` 7 passed / 0 failed, coverage 5 passed / 0
+failed.
+
+That test is the only thing establishing the central claim, so **its skip is
+refusable**: with `MFC_REQUIRE_LAKE=1` a missing `lake` is a failure rather than
+a skip, and CI sets it in the job that has a toolchain. A skipped check reads
+exactly like a passing one in a green run.
+
+### It renders files and nothing else
+
+No `git init`, no remote, no commit. A hand-initialised repository has no
+remote, no CI permissions, no branch protection and no provisioning, and a tool
+that quietly produced one hands you something that looks finished and is not.
+`mfc init` prints what it did *not* do, in order, and refuses a non-empty
+directory without `--force` — the first thing it would otherwise overwrite is a
+`lakefile.toml` somebody wrote.
+
+Every pin must be 40-hex. A branch is refused because `lake update` re-resolves
+it, so the pin would stop pinning with nothing in the repo changing to show it.
+
+### Rendered with the standard library, not copier — and when to revisit
+
+The architecture note specifies copier, and its `copier update` is the stated
+migration path for a MAJOR schema bump across N topic repos. That is a real
+benefit with, today, **no users**: one topic repo exists and it was not created
+from a template, so there is nothing for `copier update` to update. Against it,
+copier pulls jinja2, pydantic, plumbum and questionary into a package that
+argues its own placement decisions from dependency discipline.
+
+So the templates are plain text with `@@TOKEN@@` substitution — over
+`str.format` and `string.Template` because Lean uses both `{}` and `$`, and a
+scaffolder that mangles the file it writes is worse than none. A test asserts
+no rendered file carries a live token, and the renderer refuses rather than
+shipping one.
+
+**Reversal condition:** adopt copier when a second topic repo exists, *was
+created by this command*, and a MAJOR schema bump is due. These files become
+the template with the tokens rewritten to `{{ }}`.
 
 ## `bundle` recomputes; it does not carry anything across
 

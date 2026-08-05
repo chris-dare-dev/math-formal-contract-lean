@@ -147,6 +147,16 @@ jobs:
             --environment contract/testdata/artifacts/valid/environment-1.0.json \
             --closed-lanes contract/testdata/closed-lanes.json
 
+      - name: mfc init renders a repo that reaches a green build
+        env:
+          # Refuses to skip. Without this a machine with no `lake` skips the
+          # end-to-end scaffold test, and a skipped check reads exactly like a
+          # passing one in a green run.
+          MFC_REQUIRE_LAKE: "1"
+        run: |
+          pip install './contract'
+          python -m pytest contract/tests/test_scaffold.py -q
+
       - name: mfc check-ilean-coverage (the vacuous-pass guard, #31)
         run: |
           # The only check that looks for what is ABSENT. Compares the .ilean

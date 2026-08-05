@@ -35,6 +35,14 @@ from .ilean import coverage as ilean_coverage
 from .ilean import load_modules
 from .join import check as join_check
 from .join import claim_table, coverage
+from .scaffold import (
+    NEXT_STEPS,
+    Answers,
+    ScaffoldError,
+    lib_from_topic,
+    render,
+    write,
+)
 from .lint import FORBIDDEN_PROPERTY_NAMES, lint_schema
 from .rules import Status, check, summarize
 from .validate import (
@@ -478,6 +486,52 @@ def cmd_check_ilean_coverage(args: argparse.Namespace) -> int:
     return rc
 
 
+DEFAULT_CONTRACT_URL = "https://github.com/chris-dare-dev/math-formal-contract-lean"
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    answers = Answers(
+        topic=args.topic,
+        lib=args.lib or lib_from_topic(args.topic),
+        toolchain=args.toolchain,
+        mathlib_rev=args.mathlib_rev,
+        contract_rev=args.contract_rev,
+        contract_url=args.contract_url or DEFAULT_CONTRACT_URL,
+        anchor_name=args.anchor_name,
+        anchor_url=args.anchor_url,
+        anchor_rev=args.anchor_rev,
+    )
+    try:
+        files = render(answers)
+    except ScaffoldError as exc:
+        # Nothing has been written at this point, and nothing will be.
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    dest = Path(args.dest)
+    if args.dry_run:
+        print(f"would write {len(files)} file(s) to {dest}:")
+        for rel in sorted(files):
+            print(f"  {rel}  ({len(files[rel])} bytes)")
+        return EXIT_OK
+
+    try:
+        written = write(files, dest, force=args.force)
+    except ScaffoldError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except OSError as exc:
+        print(f"error: could not write to {dest}: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    print(f"ok: wrote {len(written)} file(s) to {dest}")
+    for p in written:
+        print(f"  {p.relative_to(dest)}")
+    print()
+    print(NEXT_STEPS.format(lib=answers.lib), file=sys.stderr)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfc",
@@ -584,6 +638,37 @@ def build_parser() -> argparse.ArgumentParser:
     cov.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     cov.set_defaults(func=cmd_check_ilean_coverage)
+
+    ini = sub.add_parser(
+        "init",
+        help="render a topic repository that reaches a green build on run one",
+        description="Renders files and NOTHING else: no git init, no remote, no "
+                    "commit. Every pin must be a 40-hex commit; branches are "
+                    "refused because `lake update` re-resolves them.",
+    )
+    ini.add_argument("--topic", required=True,
+                     help="topic slug, e.g. analytic-nt (same shape as an "
+                          "arXMCP notebook slug)")
+    ini.add_argument("--lib", help="Lean library name (default: derived from --topic)")
+    ini.add_argument("--toolchain", required=True,
+                     help="e.g. leanprover/lean4:v4.29.0")
+    ini.add_argument("--mathlib-rev", dest="mathlib_rev", required=True,
+                     help="40-hex Mathlib commit; must match what the anchor resolves to")
+    ini.add_argument("--contract-rev", dest="contract_rev", required=True,
+                     help="40-hex commit of this contract repo to pin against")
+    ini.add_argument("--contract-url", dest="contract_url",
+                     help=f"default: {DEFAULT_CONTRACT_URL}")
+    ini.add_argument("--anchor-name", dest="anchor_name",
+                     help="upstream package to build on; all three anchor flags "
+                          "are given together or not at all")
+    ini.add_argument("--anchor-url", dest="anchor_url")
+    ini.add_argument("--anchor-rev", dest="anchor_rev", help="40-hex")
+    ini.add_argument("--dest", default=".", help="directory to render into (default: .)")
+    ini.add_argument("--force", action="store_true",
+                     help="write into a non-empty directory")
+    ini.add_argument("--dry-run", dest="dry_run", action="store_true",
+                     help="list what would be written and exit")
+    ini.set_defaults(func=cmd_init)
 
     return parser
 
