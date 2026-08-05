@@ -328,14 +328,15 @@ def test_cli_rejects_a_missing_input(tmp_path: Path) -> None:
     assert main(["join", "--declarations", str(tmp_path / "nope.json")]) == EXIT_USAGE
 
 
-def test_cli_says_an_unvalidated_registry_was_not_validated(
-        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """No registry schema exists, so trusting one silently would be the lie."""
+def test_cli_validates_the_registry_it_is_given(tmp_path: Path) -> None:
+    """Now that registry-1.0.schema.json exists, --registry is checked like any
+    other input. It was passed through unvalidated while no schema existed, and
+    the run said so; silently trusting it would have been the lie."""
     p = _write(tmp_path)
     reg = tmp_path / "registry.json"
     reg.write_text(json.dumps({"statements": []}), encoding="utf-8")
-    main(["join", "--declarations", str(p["declarations"]), "--registry", str(reg)])
-    assert "NOT validated" in capsys.readouterr().err
+    assert main(["join", "--declarations", str(p["declarations"]),
+                 "--registry", str(reg)]) != EXIT_OK
 
 
 def test_cli_reports_an_empty_join_rather_than_printing_nothing(

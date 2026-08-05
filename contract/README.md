@@ -23,7 +23,7 @@ to serve this directory, the named exception in the consuming repo's
 
 | path | what |
 |---|---|
-| `mfc/schema/*.schema.json` | **all seven** artifact formats |
+| `mfc/schema/*.schema.json` | **all eight** artifact formats |
 | `mfc/digest.py` | the four canonical digest functions — **frozen** |
 | `mfc/lint.py` | the banned-property lint |
 | `mfc/validate.py` | artifact validation |
@@ -32,12 +32,15 @@ to serve this directory, the named exception in the consuming repo's
 | `mfc/conformance.py` | the C-01..C-12 cross-artifact rules |
 | `mfc/join.py` | the J-01..J-06 rules and the claim table |
 | `mfc/ilean.py` | the I-01..I-05 coverage rules |
+| `mfc/registry.py` | reading a `registry/1.0` document |
+| `mfc/rules_registry.py` | the R-01..R-09 registry rules |
 | `mfc/scaffold.py` | `mfc init` — the topic-repo templates |
-| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join`, `check-ilean-coverage`, `init` |
+| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join`, `check-ilean-coverage`, `init`, `registry` |
 | `pyproject.toml` | packaging, so a consumer can install it |
 | `testdata/schemas/invalid/` | schemas that must fail the lint |
 | `testdata/artifacts/valid/` | one filled instance per schema |
 | `testdata/artifacts/invalid/` | artifacts that must fail a cross-field rule |
+| `testdata/registries/invalid/` | registries that must fail an `R` rule |
 | `tests/` | pytest |
 
 ### How much of each schema was given, and how much was authored
@@ -441,6 +444,59 @@ shipping one.
 **Reversal condition:** adopt copier when a second topic repo exists, *was
 created by this command*, and a MAJOR schema bump is due. These files become
 the template with the tokens rewritten to `{{ }}`.
+
+## `registry`: the only hand-authored artifact
+
+Everything else here is emitted by a program and recomputed by another one. The
+registry is typed by a person, at 20–40 minutes an entry, so its rules are
+about the mistakes typing makes.
+
+`registry-1.0.schema.json` was **transcribed** from the design note rather than
+authored, the same discipline `digest.py` used — it was given in full there, and
+it turned out to be blocked on nothing. The open size-ceiling decision adds an
+enum member (a MINOR bump) and a policy; neither moves a shape.
+
+```bash
+mfc registry init                       # mint a 12-hex id, once per repository
+mfc registry validate registry/foo.yaml --frontier-kind-labels mathlib-gap
+```
+
+The two rules that carry the most weight:
+
+* **`R-02` recomputes `quote_sha256` from the inline text.** Without it the
+  digest is a number somebody typed — and `registry_sha256`, the entire
+  cross-repo freshness mechanism, is built from digests that were never checked
+  against what they summarize. It is whitespace-insensitive, like the digest
+  it uses, so a re-wrap does not rotate every citation.
+* **`R-06` refuses a key shaped like a corpus id.** A `chunk_id` is exactly what
+  a corpus hands you, so someone will paste one in — and chunk ids *rotate* on
+  re-parse with no alias table, so the citation silently stops resolving while
+  the old id stays addressable. `@[cites]` rejects the shape at compile time
+  too; both, deliberately, because a hand-edited YAML file never passes through
+  Lean.
+
+### Two of the nine were already structural
+
+The design note tables these as *"rules over the registry that JSON Schema
+cannot express."* True of seven. Running the fixtures through the CLI showed it
+is **not** true of `R-01` and `R-06`: `source.version` carries
+`pattern: ^v[0-9]+$` at the property level, and `entries` carries
+`propertyNames: {$ref: citationKey}`. Both fixtures fail `mfc validate` before
+`mfc registry validate` reaches the rule.
+
+Same shape as `E-08`, and the same answer: the structural guarantee is the
+stronger arrangement, the rules stay as backstops for a caller that skipped
+validation, and `SCHEMA_ENFORCED` in the tests asserts *which layer catches
+which* rather than letting a fixture pass the suite while proving nothing.
+
+### The fixtures carry no marker key
+
+Unlike `artifacts/invalid/`, the registry rejection fixtures have no
+`$comment_fixture`. `additionalProperties: false` would reject the marker
+rather than the defect, and the fixture would never reach the rule under test —
+green suite, nothing proved. The rationale lives in
+`testdata/registries/invalid/README.md`, and every fixture is a document that
+validates against the schema and fails on exactly one content rule.
 
 ## `bundle` recomputes; it does not carry anything across
 

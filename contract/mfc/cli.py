@@ -35,6 +35,9 @@ from .ilean import coverage as ilean_coverage
 from .ilean import load_modules
 from .join import check as join_check
 from .join import claim_table, coverage
+from .registry import RegistryShapeError
+from .rules_registry import check as registry_check
+from .rules_registry import mint_registry_id
 from .scaffold import (
     NEXT_STEPS,
     Answers,
@@ -409,14 +412,12 @@ def cmd_join(args: argparse.Namespace) -> int:
     # said so, rather than silently trusted.
     for label, version in (("declarations", "declarations/1.0"),
                            ("review", "review/1.0"),
-                           ("resolution", "resolution/1.0")):
+                           ("resolution", "resolution/1.0"),
+                           ("registry", "registry/1.0")):
         if label in docs:
             rc = _validate_against(docs[label], version, paths[label].name)
             if rc is not None:
                 return rc
-    if "registry" in docs:
-        print("note: --registry was supplied but this build carries no registry "
-              "schema, so its contents were NOT validated.", file=sys.stderr)
 
     results = join_check(docs["declarations"], review=docs.get("review"),
                          resolution=docs.get("resolution"),
@@ -530,6 +531,56 @@ def cmd_init(args: argparse.Namespace) -> int:
     print()
     print(NEXT_STEPS.format(lib=answers.lib), file=sys.stderr)
     return EXIT_OK
+
+
+def cmd_registry_init(args: argparse.Namespace) -> int:
+    import secrets  # noqa: PLC0415 - only this one subcommand needs randomness
+
+    print(mint_registry_id(secrets.randbits))
+    print("\nMinted once, then committed. It is not derived from the notebook "
+          "slug: slugs live in a machine-local, unauthenticated database with no "
+          "global registry, so two adopters both choosing `number-theory` would "
+          "collide silently.\n\nPut it in the registry's `registry_id`, and use "
+          "it as the middle segment of every citation key:\n"
+          "  stmt:<that value>:<your label>", file=sys.stderr)
+    return EXIT_OK
+
+
+def cmd_registry_validate(args: argparse.Namespace) -> int:
+    path = Path(args.registry)
+    if not path.is_file():
+        print(f"error: no such registry: {path}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        document = load_artifact(path)
+    except (LoadError, OSError) as exc:
+        print(f"error: {path.name}: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _validate_against(document, "registry/1.0", path.name)
+    if rc is not None:
+        return rc
+
+    try:
+        results = registry_check(
+            document, frontier_kind_labels=args.frontier_kind_labels)
+    except RegistryShapeError as exc:
+        # Unreachable once the schema has passed, but a shape error must never
+        # become a finding: it means nothing was checked.
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _report(results, args.require_all)
+    entries = document.get("entries", {})
+    kinds: dict[str, int] = {}
+    for entry in entries.values():
+        kind = entry.get("kind", "unknown")
+        kinds[kind] = kinds.get(kind, 0) + 1
+    # Per kind, never totalled -- see mfc join's J-06 for why. A count of
+    # entries is not a count of formalizable work.
+    print(f"\n{path.name}: " +
+          (", ".join(f"{k}: {n}" for k, n in sorted(kinds.items())) or "no entries"))
+    return rc
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -669,6 +720,29 @@ def build_parser() -> argparse.ArgumentParser:
     ini.add_argument("--dry-run", dest="dry_run", action="store_true",
                      help="list what would be written and exit")
     ini.set_defaults(func=cmd_init)
+
+    reg = sub.add_parser(
+        "registry",
+        help="mint a registry id, or validate a hand-authored registry",
+        description="The registry is the only hand-authored artifact here, so "
+                    "its rules are about the mistakes typing makes: a digest "
+                    "nobody recomputed, a placeholder that still validates, a "
+                    "key pasted from a corpus.",
+    )
+    regsub = reg.add_subparsers(dest="registry_command", required=True)
+
+    reg_init = regsub.add_parser(
+        "init", help="mint a 12-hex registry id (once per repository)")
+    reg_init.set_defaults(func=cmd_registry_init)
+
+    reg_val = regsub.add_parser(
+        "validate", help="schema plus the R-01..R-09 content rules")
+    reg_val.add_argument("registry", help="path to registry/*.yaml or .json")
+    reg_val.add_argument("--frontier-kind-labels", dest="frontier_kind_labels",
+                         nargs="*", help="the topic's allowlist; enables R-08")
+    reg_val.add_argument("--require-all", dest="require_all", action="store_true",
+                         help="treat any not_run rule as a failure")
+    reg_val.set_defaults(func=cmd_registry_validate)
 
     return parser
 

@@ -1,0 +1,123 @@
+{
+  "schema_version": "registry/1.0",
+  "registry_id": "9f4c1a20b7d3",
+  "notebook_hint": "bridgeland-stability",
+  "entries": {
+    "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2": {
+      "kind": "lemma",
+      "title": "Compatible pairs act on stability conditions",
+      "informal": "Informal statement of Compatible pairs act on stability conditions.",
+      "source": {
+        "scheme": "arxiv",
+        "id": "math/0212237",
+        "version": "v3",
+        "printed_number": "8.2",
+        "locator": null,
+        "title": "Stability conditions on triangulated categories",
+        "authors": [
+          "Tom Bridgeland"
+        ]
+      },
+      "quote_mode": "verbatim",
+      "quote": "A stability condition on a triangulated category D consists of a group homomorphism Z: K(D) -> C together with full additive subcategories P(f) for each f in R.",
+      "quote_norm": "nfc-ws-collapse/1",
+      "quote_sha256": "74854c2c8eea5719db4d74a645b1b5a039d51010b572fb7f9006f42e7eb012b8",
+      "mint_resolution": {
+        "notebook": "bridgeland-stability",
+        "chunk_id": "arxiv:math/0212237:a82c3230040fd724",
+        "matched_by": "quote_sha256",
+        "corpus_manifest_content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "corpus_version": 5048,
+        "observed_at": "2026-08-04T08:55:10Z"
+      },
+      "depends_on": [],
+      "frontier": [
+        {
+          "id": "gltilde-universal-cover",
+          "kind_class": "missing-library",
+          "kind_label": "mathlib gap",
+          "statement": "The universal cover of GL+(2,R) is not constructed in Mathlib at this revision; pi_1(S^1) = Z is absent.",
+          "discharged_by": null
+        }
+      ],
+      "minted_at": "2026-08-04",
+      "minted_by": "Chris Dare",
+      "supersedes": null,
+      "superseded_by": null,
+      "note": null
+    },
+    "stmt:9f4c1a20b7d3:bridgeland2007.prop-8.1": {
+      "kind": "proposition",
+      "title": "The slicing determines the phase function",
+      "informal": "Informal statement of The slicing determines the phase function.",
+      "source": {
+        "scheme": "arxiv",
+        "id": "math/0212237",
+        "version": "v3",
+        "printed_number": "8.1",
+        "locator": null,
+        "title": "Stability conditions on triangulated categories",
+        "authors": [
+          "Tom Bridgeland"
+        ]
+      },
+      "quote_mode": "verbatim",
+      "quote": "A stability condition on a triangulated category D consists of a group homomorphism Z: K(D) -> C together with full additive subcategories P(f) for each f in R. (Proposition form.)",
+      "quote_norm": "nfc-ws-collapse/1",
+      "quote_sha256": "83d4977e2a88ddae9063f4c0816222b6b8ae518b2f744f6303c1fe25286d1a0d",
+      "mint_resolution": {
+        "notebook": "bridgeland-stability",
+        "chunk_id": "arxiv:math/0212237:a82c3230040fd724",
+        "matched_by": "quote_sha256",
+        "corpus_manifest_content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "corpus_version": 5048,
+        "observed_at": "2026-08-04T08:55:10Z"
+      },
+      "depends_on": [
+        "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2"
+      ],
+      "frontier": [],
+      "minted_at": "2026-08-04",
+      "minted_by": "Chris Dare",
+      "supersedes": null,
+      "superseded_by": null,
+      "note": null
+    },
+    "stmt:9f4c1a20b7d3:obl-stab-action": {
+      "kind": "obligation",
+      "title": "Show the action is free",
+      "informal": "Informal statement of Show the action is free.",
+      "source": {
+        "scheme": "arxiv",
+        "id": "math/0212237",
+        "version": "v3",
+        "printed_number": null,
+        "locator": null,
+        "title": "Stability conditions on triangulated categories",
+        "authors": [
+          "Tom Bridgeland"
+        ]
+      },
+      "quote_mode": "digest_only",
+      "quote": null,
+      "quote_norm": "nfc-ws-collapse/1",
+      "quote_sha256": null,
+      "mint_resolution": null,
+      "depends_on": [],
+      "frontier": [
+        {
+          "id": "gltilde-universal-cover",
+          "kind_class": "missing-library",
+          "kind_label": "mathlib-gap",
+          "statement": "The universal cover of GL+(2,R) is not constructed in Mathlib at this revision; pi_1(S^1) = Z is absent.",
+          "discharged_by": null
+        }
+      ],
+      "minted_at": "2026-08-04",
+      "minted_by": "Chris Dare",
+      "supersedes": null,
+      "superseded_by": null,
+      "note": "Owed: no declaration yet asserts freeness. Blocked on the GLTilde fibre identification."
+    }
+  }
+}

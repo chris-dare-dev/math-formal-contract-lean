@@ -293,6 +293,21 @@ jobs:
             echo "ok: $(basename "$f") rejected"
           done
 
+      - name: registry rejection fixtures are rejected
+        run: |
+          set -euo pipefail
+          for f in contract/testdata/registries/invalid/*.json; do
+            set +e
+            mfc registry validate "$f" --frontier-kind-labels mathlib-gap >/dev/null 2>&1
+            code=$?
+            set -e
+            if [ "$code" -ne 1 ]; then
+              echo "::error::$(basename "$f") must exit 1, got $code -- an R rule is not firing"
+              exit 1
+            fi
+            echo "ok: $(basename "$f") rejected"
+          done
+
       - name: pytest
         run: python -m pytest contract/tests -q
 

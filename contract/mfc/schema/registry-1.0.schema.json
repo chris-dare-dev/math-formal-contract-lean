@@ -1,0 +1,485 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/registry-1.0.schema.json",
+  "title": "Statement registry (registry/1.0)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "registry_id",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "registry/1.0"
+    },
+    "registry_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "notebook_hint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z][a-z0-9-]{2,30}$"
+    },
+    "entries": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/citationKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "citationKey": {
+      "type": "string",
+      "pattern": "^stmt:[0-9a-f]{12}:[a-z][a-z0-9._-]{0,63}$",
+      "$comment": "3 segments, fixed arity, no corpus-derived bytes. The paper coordinate is NOT here."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "isoDate": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "isoTs": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scheme",
+        "id",
+        "version",
+        "printed_number",
+        "locator"
+      ],
+      "properties": {
+        "scheme": {
+          "enum": [
+            "arxiv",
+            "doi",
+            "textbook",
+            "url"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^v[0-9]+$"
+        },
+        "printed_number": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "locator": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "arXiv ids are immutable only WITH a version; the bare form resolves to LATEST and silently drifts.",
+          "if": {
+            "properties": {
+              "scheme": {
+                "const": "arxiv"
+              }
+            },
+            "required": [
+              "scheme"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "type": "string",
+                "pattern": "^v[0-9]+$"
+              }
+            },
+            "required": [
+              "version"
+            ]
+          }
+        },
+        {
+          "$comment": "textbook:<slug> sources carry no version axis; a version here is a category error.",
+          "if": {
+            "properties": {
+              "scheme": {
+                "const": "textbook"
+              }
+            },
+            "required": [
+              "scheme"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "frontierItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind_class",
+        "statement",
+        "discharged_by"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "kind_class": {
+          "enum": [
+            "closed-lane",
+            "missing-library",
+            "open-problem",
+            "interface"
+          ]
+        },
+        "kind_label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64,
+          "$comment": "free per-topic label; the copier answer `frontier_kind_labels[]` is the allowlist mfc lint checks against"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "discharged_by": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "discharged_at",
+                "discharged_by_reviewer"
+              ],
+              "properties": {
+                "key": {
+                  "$ref": "#/$defs/citationKey"
+                },
+                "discharged_at": {
+                  "$ref": "#/$defs/isoDate"
+                },
+                "discharged_by_reviewer": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "note": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "mintResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "notebook",
+        "chunk_id",
+        "matched_by",
+        "corpus_manifest_content_hash",
+        "observed_at"
+      ],
+      "properties": {
+        "notebook": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{2,30}$"
+        },
+        "chunk_id": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "CACHE HINT ONLY. Rotates on any parse change; there is no alias table and merge_insert has no delete arm, so a stale id stays addressable. Never authoritative."
+        },
+        "matched_by": {
+          "enum": [
+            "quote_sha256",
+            "printed_number"
+          ],
+          "$comment": "`fuzzy` is deliberately absent: an entry may not be MINTED on a fuzzy match."
+        },
+        "corpus_manifest_content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "corpus_version": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "$comment": "LanceDB MVCC integer. Recorded, never trusted: a restore-from-backup presents a LOWER version over different bytes."
+        },
+        "observed_at": {
+          "$ref": "#/$defs/isoTs"
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "title",
+        "informal",
+        "source",
+        "quote_mode",
+        "quote",
+        "quote_norm",
+        "quote_sha256",
+        "mint_resolution",
+        "depends_on",
+        "frontier",
+        "minted_at",
+        "minted_by",
+        "supersedes",
+        "superseded_by"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "theorem",
+            "lemma",
+            "proposition",
+            "corollary",
+            "definition",
+            "construction",
+            "equation",
+            "remark",
+            "conjecture",
+            "obligation"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "informal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "quote_mode": {
+          "enum": [
+            "verbatim",
+            "digest_only"
+          ]
+        },
+        "quote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quote_norm": {
+          "const": "nfc-ws-collapse/1"
+        },
+        "quote_sha256": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "quote_digest_source": {
+          "$comment": "digest_only mode: WHERE the hash came from, since the text is not inlined.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "notebook",
+                "chunk_id",
+                "computed_at"
+              ],
+              "properties": {
+                "notebook": {
+                  "type": "string"
+                },
+                "chunk_id": {
+                  "type": "string"
+                },
+                "computed_at": {
+                  "$ref": "#/$defs/isoTs"
+                }
+              }
+            }
+          ]
+        },
+        "mint_resolution": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/mintResolution"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/citationKey"
+          },
+          "uniqueItems": true
+        },
+        "frontier": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frontierItem"
+          }
+        },
+        "minted_at": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "minted_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supersedes": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/citationKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "superseded_by": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/citationKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "verbatim mode MUST inline the text and MUST hash it.",
+          "if": {
+            "properties": {
+              "quote_mode": {
+                "const": "verbatim"
+              }
+            },
+            "required": [
+              "quote_mode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quote": {
+                "type": "string",
+                "minLength": 1
+              },
+              "quote_sha256": {
+                "$ref": "#/$defs/sha256"
+              }
+            },
+            "required": [
+              "quote",
+              "quote_sha256"
+            ]
+          }
+        },
+        {
+          "$comment": "Only an obligation may lack a mint_resolution. Every other kind must have matched a live chunk at least once.",
+          "if": {
+            "not": {
+              "properties": {
+                "kind": {
+                  "const": "obligation"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "mint_resolution": {
+                "$ref": "#/$defs/mintResolution"
+              }
+            },
+            "required": [
+              "mint_resolution"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

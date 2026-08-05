@@ -55,10 +55,14 @@ def _schema(name: str) -> dict:
     return _load(SCHEMA_DIR / f"{name}.schema.json")
 
 
-def test_all_seven_schemas_are_present() -> None:
+def test_every_schema_is_present() -> None:
+    """Eight. `registry-1.0` joined the original seven once the accessor work
+    showed the schema was fully specified in the design note and blocked on
+    nothing — the open size-ceiling decision adds an enum member and a policy,
+    neither of which moves a shape."""
     assert SCHEMAS == [
         "build-1.0", "bundle-1.0", "declarations-1.0", "emission-1.0",
-        "environment-1.0", "resolution-1.0", "review-1.0",
+        "environment-1.0", "registry-1.0", "resolution-1.0", "review-1.0",
     ]
 
 
