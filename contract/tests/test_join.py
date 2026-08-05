@@ -346,3 +346,71 @@ def test_cli_reports_an_empty_join_rather_than_printing_nothing(
                  encoding="utf-8")
     main(["join", "--declarations", str(p)])
     assert "nothing to join" in capsys.readouterr().err
+
+
+# --- J-06: the work queue, against the real registry shape --------------------
+
+def _registry(**entries: dict) -> dict:
+    """`registry/1.0`. Entries keyed BY CITATION KEY, not a `statements[]` list."""
+    return {"schema_version": "registry/1.0", "registry_id": "9f4c1a20b7d3",
+            "entries": entries}
+
+
+def _entry(kind: str = "lemma", frontier: list | None = None) -> dict:
+    return {"kind": kind, "title": "t", "informal": "i", "frontier": frontier or []}
+
+
+def _open(fid: str) -> dict:
+    return {"id": fid, "kind_class": "open-problem", "statement": "s",
+            "discharged_by": None}
+
+
+def test_j06_lists_only_uncited_entries() -> None:
+    decls, _, _ = _coherent()
+    registry = _registry(**{KEY_A: _entry(), KEY_B: _entry(kind="obligation")})
+    results = join_check(decls, registry=registry)
+    j06 = next(r for r in results if r.rule == "J-06")
+    assert j06.status is Status.FAIL
+    assert [f.where for f in j06.findings] == [KEY_B], "KEY_A is cited"
+
+
+def test_j06_passes_when_every_entry_is_cited() -> None:
+    decls, _, _ = _coherent()
+    statuses = {r.rule: r.status
+                for r in join_check(decls, registry=_registry(**{KEY_A: _entry()}))}
+    assert statuses["J-06"] is Status.PASS
+
+
+def test_j06_counts_per_kind_and_never_totals() -> None:
+    """A queue of 90 in one lane and 10 in another is not '100 things to do'.
+
+    The whole value of this file is that an agent can plan against it, and a
+    single total is the one number that makes it unplannable.
+    """
+    decls, _, _ = _coherent()
+    registry = _registry(**{
+        KEY_B: _entry(kind="obligation"),
+        "stmt:9f4c1a20b7d3:c": _entry(kind="obligation"),
+        "stmt:9f4c1a20b7d3:d": _entry(kind="conjecture"),
+    })
+    j06 = next(r for r in join_check(decls, registry=registry) if r.rule == "J-06")
+    assert j06.reason == "conjecture: 1, obligation: 2"
+    assert "3" not in j06.reason
+
+
+def test_j06_rolls_up_the_open_frontier() -> None:
+    """#37 asks for the frontier rolled up: it is what makes an entry actionable."""
+    decls, _, _ = _coherent()
+    registry = _registry(**{KEY_B: _entry(kind="obligation",
+                                          frontier=[_open("gltilde-universal-cover")])})
+    j06 = next(r for r in join_check(decls, registry=registry) if r.rule == "J-06")
+    assert "gltilde-universal-cover" in j06.findings[0].detail
+
+
+def test_j06_reports_an_unreadable_registry_as_not_run() -> None:
+    """Reading it as empty would report a CLEAN work queue -- a vacuous pass."""
+    decls, _, _ = _coherent()
+    j06 = next(r for r in join_check(decls, registry={"statements": []})
+               if r.rule == "J-06")
+    assert j06.status is Status.NOT_RUN
+    assert "not readable by this build" in j06.reason

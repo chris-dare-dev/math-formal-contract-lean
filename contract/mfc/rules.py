@@ -26,6 +26,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Iterable, NamedTuple
 
+from .registry import RegistryShapeError, open_frontier
+from .registry import entries as registry_entries
+
 #: Pretty-printer elision markers. `E-07` exists because an elided `type_pp`
 #: lets two different statements hash identically -- and, separately, because
 #: an elided statement cannot be re-elaborated, which is what `--restate-check`
@@ -109,14 +112,24 @@ def check(
             e03.append(Finding("E-03", c["name"], f"axioms outside policy: {extra}"))
     add("E-03", "every axiom closure is within the declared policy", e03)
 
+    # The registry is read ONCE, and a shape this build does not recognise
+    # stops both rules that need it rather than silently emptying them.
+    known: dict[str, dict] | None = None
+    registry_problem: str | None = None
+    if registry is not None:
+        try:
+            known = registry_entries(registry)
+        except RegistryShapeError as exc:
+            registry_problem = str(exc)
+
     # E-04 -- every cited key exists in the registry.
-    if registry is None:
+    if known is None:
         results.append(RuleResult(
             "E-04", "every cites[].key exists in the registry", Status.NOT_RUN,
-            reason="no registry supplied (--registry); the registry schema is "
+            reason=registry_problem or
+                   "no registry supplied (--registry); the registry schema is "
                    "gated on the open size-ceiling decision"))
     else:
-        known = {e["key"] for e in registry.get("statements", [])}
         add("E-04", "every cites[].key exists in the registry",
             [Finding("E-04", c["name"], f"cites unknown key {cite['key']!r}")
              for c in constants for cite in c["cites"] if cite["key"] not in known])
@@ -131,22 +144,28 @@ def check(
                    f"{cite['frontier']}")
            for c in constants for cite in c["cites"]
            if cite["relation_claimed"] == "exact" and cite["frontier"]]
-    if registry is None:
+    if known is None:
         results.append(RuleResult(
             "E-05", "relation_claimed=exact implies an empty frontier",
             Status.FAIL if e05 else Status.NOT_RUN, tuple(e05),
-            reason="" if e05 else "emission half passed; the registry half "
-                                  "(cited entry's own frontier) needs --registry"))
+            reason="" if e05 else
+                   (registry_problem or
+                    "emission half passed; the registry half (cited entry's own "
+                    "frontier) needs --registry")))
     else:
-        known = {e["key"]: e for e in registry.get("statements", [])}
         for c in constants:
             for cite in c["cites"]:
                 entry = known.get(cite["key"])
-                if (cite["relation_claimed"] == "exact" and entry
-                        and entry.get("frontier")):
+                if entry is None or cite["relation_claimed"] != "exact":
+                    continue
+                # OPEN items only. An entry whose frontier is fully discharged
+                # has nothing outstanding, and refusing `exact` there would
+                # penalise the one thing a frontier is meant to reward.
+                still_open = open_frontier(entry)
+                if still_open:
                     e05.append(Finding("E-05", c["name"],
                         f"relation_claimed=exact but registry entry "
-                        f"{cite['key']!r} has an open frontier"))
+                        f"{cite['key']!r} leaves {still_open} undischarged"))
         add("E-05", "relation_claimed=exact implies an empty frontier", e05)
 
     # E-06 -- `no_claim` without a note says two things are related without

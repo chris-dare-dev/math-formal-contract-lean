@@ -101,16 +101,76 @@ def test_e05_still_fails_on_the_emission_half_without_a_registry() -> None:
     assert statuses["E-05"] is Status.FAIL
 
 
+def _registry(**entries: dict) -> dict:
+    """A `registry/1.0` document. Entries are keyed BY CITATION KEY.
+
+    Spelled out here rather than in a helper module because getting this shape
+    wrong is precisely what these tests exist to prevent: `E-04` and `E-05`
+    previously read a `statements[]` list that no released schema ever had.
+    """
+    return {"schema_version": "registry/1.0", "registry_id": "9f4c1a20b7d3",
+            "entries": entries}
+
+
+def _entry(kind: str = "lemma", frontier: list | None = None) -> dict:
+    return {"kind": kind, "title": "t", "informal": "i", "frontier": frontier or []}
+
+
+def _frontier(fid: str, *, discharged: bool = False) -> dict:
+    return {"id": fid, "kind_class": "missing-library", "statement": "s",
+            "discharged_by": ({"key": "stmt:9f4c1a20b7d3:x",
+                               "discharged_at": "2026-08-04",
+                               "discharged_by_reviewer": "Chris Dare"}
+                              if discharged else None)}
+
+
 def test_e04_runs_when_a_registry_is_supplied() -> None:
     emission = _load(VALID_DIR / "emission-1.0.json")
     keys = {c["key"] for con in emission["constants"] for c in con["cites"]}
-    registry = {"statements": [{"key": k, "frontier": []} for k in keys]}
+    registry = _registry(**{k: _entry() for k in keys})
     assert _run(emission, registry=registry)["E-04"] is Status.PASS
 
 
 def test_e04_fails_on_a_key_absent_from_the_registry() -> None:
     emission = _load(VALID_DIR / "emission-1.0.json")
-    assert _run(emission, registry={"statements": []})["E-04"] is Status.FAIL
+    assert _run(emission, registry=_registry())["E-04"] is Status.FAIL
+
+
+def test_the_invented_statements_shape_is_refused_by_name() -> None:
+    """It was read as a list of `{key, frontier}` for three rules. It never existed.
+
+    The failure mode is the reason this is a hard error rather than a fallback:
+    an empty key set makes E-04 report EVERY citation as unknown while J-06
+    reports a clean work queue over zero entries -- a finding flood and a
+    vacuous pass out of the same bad input.
+    """
+    emission = _load(VALID_DIR / "emission-1.0.json")
+    results = check(emission, _env(), registry={"statements": [{"key": "x"}]})
+    e04 = next(r for r in results if r.rule == "E-04")
+    assert e04.status is Status.NOT_RUN
+    assert "statements" in e04.reason and "no released schema" in e04.reason
+
+
+def test_e05_permits_exact_when_the_frontier_is_fully_discharged() -> None:
+    """An entry with nothing outstanding must not be penalised for having had
+    a frontier. Length is not the predicate; `discharged_by: null` is."""
+    emission = _load(BAD_DIR / "relation-exact-with-frontier.json")
+    key = emission["constants"][0]["cites"][0]["key"]
+    emission["constants"][0]["cites"][0]["frontier"] = []   # clear the emission half
+    registry = _registry(**{key: _entry(frontier=[_frontier("a", discharged=True)])})
+    assert _run(emission, registry=registry)["E-05"] is Status.PASS
+
+
+def test_e05_refuses_exact_when_a_frontier_item_is_open() -> None:
+    emission = _load(BAD_DIR / "relation-exact-with-frontier.json")
+    key = emission["constants"][0]["cites"][0]["key"]
+    emission["constants"][0]["cites"][0]["frontier"] = []
+    registry = _registry(**{key: _entry(frontier=[_frontier("a", discharged=True),
+                                                 _frontier("b")])})
+    results = check(emission, _env(), registry=registry)
+    e05 = next(r for r in results if r.rule == "E-05")
+    assert e05.status is Status.FAIL
+    assert "'b'" in e05.findings[0].detail and "'a'" not in e05.findings[0].detail
 
 
 # --- the CLI ------------------------------------------------------------------

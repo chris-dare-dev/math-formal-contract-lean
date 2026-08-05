@@ -48,6 +48,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable, NamedTuple
 
+from .registry import RegistryShapeError, kind_of, open_frontier
+from .registry import entries as registry_entries
 from .rules import Finding, RuleResult, Status
 
 #: The issue whose resolution unblocks `J-06`. Named in the `not_run` reason so
@@ -221,15 +223,38 @@ def check(
              for r in sorted(resolution.get("results", []), key=lambda x: x["key"])
              if r["key"] not in cited_keys])
 
-    # J-06 -- the work queue. Blocked, and it says on what.
+    # J-06 -- the work queue: every registry entry with zero inbound citations,
+    # partitioned by `kind`, with each entry's open frontier rolled up.
     if registry is None:
         skip("J-06", "the obligation lane: registry entries with no citation",
              WORKQUEUE_BLOCKER)
-    else:  # pragma: no cover - unreachable until the registry schema exists
-        entries = registry.get("statements", [])
-        add("J-06", "the obligation lane: registry entries with no citation",
-            [Finding("J-06", e["key"], f"kind={e.get('kind')!r}, zero inbound cites")
-             for e in entries if e["key"] not in cited_keys])
+    else:
+        try:
+            entries = registry_entries(registry)
+        except RegistryShapeError as exc:
+            # Never a finding. An unreadable registry would otherwise report a
+            # clean work queue over zero entries -- a vacuous pass.
+            skip("J-06", "the obligation lane: registry entries with no citation",
+                 f"registry not readable by this build: {exc}")
+        else:
+            uncited = {k: e for k, e in sorted(entries.items())
+                       if k not in cited_keys}
+            findings = []
+            for key, entry in uncited.items():
+                still_open = open_frontier(entry)
+                rolled = f"; open frontier {still_open}" if still_open else ""
+                findings.append(Finding("J-06", key,
+                    f"kind={kind_of(entry)!r}, zero inbound cites{rolled}"))
+            # Counted PER KIND and never totalled. A queue of 90 entries in one
+            # lane and 10 in another is not "100 things to do", and the whole
+            # value of this file is that an agent can plan against it.
+            by_kind: dict[str, int] = {}
+            for entry in uncited.values():
+                by_kind[kind_of(entry)] = by_kind.get(kind_of(entry), 0) + 1
+            add("J-06", "the obligation lane: registry entries with no citation",
+                findings,
+                reason=(", ".join(f"{k}: {n}" for k, n in sorted(by_kind.items()))
+                        or f"all {len(entries)} entries are cited"))
 
     return results
 

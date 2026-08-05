@@ -283,19 +283,48 @@ reported. The two failure modes are kept apart because their remedies differ:
 `J-03` refuses to merge disagreeing reviews of one statement. Deduping them
 would pick a winner, and the point is that a person has to.
 
-### `J-06` is blocked, and names what on
+### `J-06` is implemented; the *artifact* is what waits on the decision
 
 The work queue — every registry entry with **zero inbound citations**,
-partitioned by `kind` — is the file an agent plans against. It cannot be
-written yet: there is no registry, and the set of `kind` values is exactly what
-the open registry size-ceiling decision settles (is there a `sketch` lane?).
-Guessing it would bake an unmade decision into an artifact, so `J-06` reports
-`not_run` and its reason names the decision rather than just the absence.
+partitioned by `kind`, with each entry's open frontier rolled up — is the file
+an agent plans against. The rule now computes it, and hand it a registry
+document and it runs:
 
-For the same reason `--registry` is passed through **unvalidated**, and the run
-says so on stderr. There is no registry schema to validate against, and
-silently trusting the file would be the lie the rest of this package exists to
-prevent.
+```
+   FAIL  J-06  the obligation lane: registry entries with no citation
+         stmt:9f4c1a20b7d3:b: kind='obligation', zero inbound cites; open frontier ['gltilde-universal-cover']
+         (conjecture: 1, obligation: 2)
+```
+
+Counted **per kind and never totalled**. A queue of 90 entries in one lane and
+10 in another is not "100 things to do", and a single total is the one number
+that makes the file unplannable.
+
+What still waits on the open size-ceiling decision is the registry *schema* —
+whether there is a `sketch` lane, and whether the entry count is capped. Adding
+an enum member is a MINOR bump that flows through `kind` untouched, so the
+accessor above is decision-independent; `--registry` is still passed through
+**unvalidated** and the run says so, because there is no `registry-1.0.schema.json`
+in this build.
+
+### The accessor was wrong for three rules at once
+
+`E-04`, the registry half of `E-05`, and `J-06` all read
+`registry["statements"]` as a list of `{key, frontier}`. **No released schema
+ever had that shape** — it was invented alongside the rules and then tested
+against itself. `registry/1.0` keys `entries` **by citation key**, and
+`frontier[]` holds objects whose open state is `discharged_by: null`.
+
+Two things that hid behind the wrong shape:
+
+* an entry whose frontier items are **all discharged** has nothing outstanding,
+  and `E-05` was refusing `relation_claimed: exact` on those. Length was never
+  the predicate.
+* reading an unrecognised document as an *empty* registry makes `E-04` report
+  every citation in the repository as unknown while `J-06` reports a clean work
+  queue over zero entries — a finding flood and a vacuous pass out of one bad
+  input. So `mfc/registry.py` raises, and the callers turn that into `not_run`
+  with the reason. Same discipline as an unrecognised `.ilean` layout.
 
 ## `check-ilean-coverage`: the only check that looks for what is *absent*
 
