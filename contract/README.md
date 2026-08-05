@@ -23,7 +23,7 @@ to serve this directory, the named exception in the consuming repo's
 
 | path | what |
 |---|---|
-| `mfc/schema/*.schema.json` | **all eight** artifact formats |
+| `mfc/schema/*.schema.json` | **all nine** artifact formats |
 | `mfc/digest.py` | the four canonical digest functions — **frozen** |
 | `mfc/lint.py` | the banned-property lint |
 | `mfc/validate.py` | artifact validation |
@@ -35,7 +35,8 @@ to serve this directory, the named exception in the consuming repo's
 | `mfc/registry.py` | reading a `registry/1.0` document |
 | `mfc/rules_registry.py` | the R-01..R-09 registry rules |
 | `mfc/scaffold.py` | `mfc init` — the topic-repo templates |
-| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join`, `check-ilean-coverage`, `init`, `registry` |
+| `mfc/env.py` | `mfc env` — reads a topic checkout, writes `environment/1.0` |
+| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join`, `env`, `check-ilean-coverage`, `init`, `registry` |
 | `pyproject.toml` | packaging, so a consumer can install it |
 | `testdata/schemas/invalid/` | schemas that must fail the lint |
 | `testdata/artifacts/valid/` | one filled instance per schema |
@@ -147,6 +148,67 @@ cannot hash identically. It also turns out to select exactly the statements
 that cannot be re-elaborated — measured at 339/339 round-trip on elision-free
 statements and 0/61 on elided ones — so it is already the precondition
 `--restate-check` needs.
+
+## `env`: the record everything consumed and nothing produced
+
+`bundle` stamps `env_digest` onto declarations. `conformance` checks `C-05` and
+`C-10` against it. `join` renders a review `not_applicable` when it disagrees.
+All three read an `environment/1.0` record — and until now **nothing wrote one.**
+In this repository's own CI the real emission is bundled against
+`testdata/artifacts/valid/environment-1.0.json`, a *fixture*: the one artifact
+meant to pin what the measurement was made in was describing a different machine.
+
+```bash
+mfc env --repo ../topic-repo --out attest/environment.json \
+        --axiom-allowlist propext,Quot.sound,Classical.choice \
+        --emitter-version mfc-emit/1.0.0
+```
+
+Every field is read out of the checkout — `lean-toolchain`,
+`lake-manifest.json`, `lakefile.toml`, `git`. Two are inputs rather than
+observations, and deliberately so:
+
+* **`axiom_policy`** is a policy, not a property of a build. Defaulting it would
+  be this package asserting a policy on a topic repo's behalf, so it is
+  required — the same reasoning that makes `@[cites]`'s `relation` mandatory.
+* **`lean_githash` / `lake_version`** come from running the toolchain, and are
+  overridable so a caller without one on PATH supplies what it measured rather
+  than receiving a fabricated value.
+
+### What it says out loud
+
+Run against the consuming repo it reports, correctly and unprompted:
+
+```
+  NOT PINNED    13 package(s) track a branch and would move on `lake update`:
+                Cli, LeanSearchClient, MD4Lean, Qq, aesop, batteries, importGraph,
+                informal, mathlib, plausible, proofwidgets, subverso, verso
+  UNTAGGED      valid artifact, invalid release -- a release pin requires a tag
+```
+
+Thirteen of fifteen, **mathlib among them**. That is why `env_digest` hashes
+`rev` and never `inputRev`: `inputRev` is what a caller asked for, `rev` is what
+resolved, and hashing the ask would leave the digest stable across a real
+environment change. `test_changing_input_rev_alone_does_not_move_the_digest`
+pins that, with `test_changing_a_resolved_rev_does_move_the_digest` as its
+control.
+
+A dirty worktree is **recorded, not refused** — refusing would make the tool
+unusable mid-work, and dropping it would let a digest describe a tree that is
+not in git. `mfc lint` is where dirty becomes fatal, in CI mode.
+
+A package with no resolved 40-hex `rev` is refused outright rather than
+placeholdered: an unpinnable dependency inside a digest that claims to pin
+everything is worse than no artifact.
+
+### It will not run against this package
+
+`mfc env --repo .` here fails with *"'MathFormalContract' is not in
+lake-manifest.json"*, and that is correct. This is a leaf with no manifest
+packages — it is the contract package, not a topic repo. Which also means this
+repo's own CI cannot produce a real environment record for itself, and its use
+of the fixture is a test of the emitter rather than a trust record. Read it that
+way.
 
 ## `conformance`: seven valid artifacts that do not describe the same thing
 
@@ -346,7 +408,7 @@ Counted **per kind and never totalled**. A queue of 90 entries in one lane and
 that makes the file unplannable.
 
 `mfc join --registry … --workqueue-out attest/workqueue.json` writes that set as
-`workqueue/1.0`, the eighth artifact:
+`workqueue/1.0`, the ninth artifact:
 
 ```json
 {

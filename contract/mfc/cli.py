@@ -30,6 +30,8 @@ from .bundle import BundleError, build_declarations, dumps
 from .conformance import check as conformance_check
 from .conformance import evidence_table, gather
 from .digest import file_digest
+from .env import EnvError
+from .env import build as env_build
 from .ilean import DEFAULT_BUILD_DIR, IleanError
 from .ilean import check as ilean_check
 from .ilean import coverage as ilean_coverage
@@ -482,6 +484,76 @@ def cmd_join(args: argparse.Namespace) -> int:
     return rc
 
 
+def _mfc_version() -> str:
+    """This package's version, reported as unknown rather than guessed.
+
+    A hard-coded fallback would put a version string into a trust record that
+    no installed artifact carries.
+    """
+    try:
+        from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - stdlib since 3.8
+        return "unknown"
+    try:
+        return version("mfc")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def cmd_env(args: argparse.Namespace) -> int:
+    repo = Path(args.repo)
+    if not repo.is_dir():
+        print(f"error: no such repository: {repo}", file=sys.stderr)
+        return EXIT_USAGE
+
+    allowlist = [a.strip() for a in args.axiom_allowlist.split(",") if a.strip()]
+    if not allowlist:
+        print("error: --axiom-allowlist is empty; an empty allowlist permits "
+              "nothing and is never what a caller means", file=sys.stderr)
+        return EXIT_USAGE
+
+    try:
+        doc = env_build(
+            repo,
+            allowlist=allowlist,
+            contract_package=args.contract_package,
+            lean_githash=args.lean_githash,
+            lake_version=args.lake_version,
+            mfc_version=_mfc_version(),
+            emitter_version=args.emitter_version,
+        )
+    except EnvError as exc:
+        # Exit 2, never 1. "The environment could not be read" must not be
+        # reportable as "the environment has findings".
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _validate_against(doc, "environment/1.0", Path(args.out).name)
+    if rc is not None:
+        return rc
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {out}")
+    print(f"  env_digest    {doc['env_digest']}")
+    print(f"  packages      {len(doc['packages'])}")
+
+    # Both of these are drift the record is supposed to make visible rather
+    # than carry silently, so they are said out loud on every run.
+    if doc["input_rev_is_branch"]:
+        print(f"  NOT PINNED    {len(doc['input_rev_is_branch'])} package(s) "
+              f"track a branch and would move on `lake update`: "
+              f"{', '.join(doc['input_rev_is_branch'])}")
+    if doc["root_package"]["worktree_dirty"]:
+        print("  DIRTY         the worktree has uncommitted changes, so this "
+              "digest describes a tree that is not in git", file=sys.stderr)
+    if doc["root_package"]["tag"] is None:
+        print("  UNTAGGED      valid artifact, invalid release -- a release pin "
+              "requires a tag")
+    return EXIT_OK
+
+
 def cmd_check_ilean_coverage(args: argparse.Namespace) -> int:
     emission_path = Path(args.emission)
     if not emission_path.is_file():
@@ -712,6 +784,34 @@ def build_parser() -> argparse.ArgumentParser:
     joi.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     joi.set_defaults(func=cmd_join)
+
+    envp = sub.add_parser(
+        "env",
+        help="read a topic repo's checkout and write environment/1.0",
+        description="Produces the record every other check CONSUMES and "
+                    "nothing produced. Observed from lean-toolchain, "
+                    "lake-manifest.json, lakefile.toml and git -- not authored. "
+                    "`axiom_policy` is required rather than defaulted, because "
+                    "a policy is not a property of a build and this package "
+                    "must not assert one on a topic repo's behalf.",
+    )
+    envp.add_argument("--repo", required=True, help="topic repository checkout")
+    envp.add_argument("--out", required=True, help="where to write environment.json")
+    envp.add_argument("--axiom-allowlist", dest="axiom_allowlist", required=True,
+                      help="comma-separated, e.g. propext,Quot.sound,Classical.choice")
+    envp.add_argument("--emitter-version", dest="emitter_version", required=True,
+                      help="version of the Lean emitter that produced the "
+                           "emission; this tool cannot observe it")
+    envp.add_argument("--contract-package", dest="contract_package",
+                      default="MathFormalContract",
+                      help="manifest name of the contract package (default: "
+                           "MathFormalContract)")
+    envp.add_argument("--lean-githash", dest="lean_githash",
+                      help="override `lean --githash`, for a caller with no "
+                           "toolchain on PATH that measured it elsewhere")
+    envp.add_argument("--lake-version", dest="lake_version",
+                      help="override `lake --version`")
+    envp.set_defaults(func=cmd_env)
 
     cov = sub.add_parser(
         "check-ilean-coverage",
