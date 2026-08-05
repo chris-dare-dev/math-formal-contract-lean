@@ -56,13 +56,24 @@ def _schema(name: str) -> dict:
 
 
 def test_every_schema_is_present() -> None:
-    """Eight. `registry-1.0` joined the original seven once the accessor work
-    showed the schema was fully specified in the design note and blocked on
-    nothing — the open size-ceiling decision adds an enum member and a policy,
-    neither of which moves a shape."""
+    """Nine.
+
+    `registry-1.0` joined the original seven once the accessor work showed the
+    schema was fully specified in the design note and blocked on nothing — the
+    open size-ceiling decision adds an enum member and a policy, neither of
+    which moves a shape.
+
+    `workqueue-1.0` is the ninth, and it was blocked on that same decision until
+    the blocker was read closely: partitioning by `kind` only bakes in an unmade
+    decision if the kinds are RE-DECLARED here. They are not — `lanes` keys on a
+    pattern, so a future `sketch` lane is a one-schema change. It is the only
+    artifact `join` writes, and it may be written because it carries no verdict
+    to aggregate.
+    """
     assert SCHEMAS == [
         "build-1.0", "bundle-1.0", "declarations-1.0", "emission-1.0",
         "environment-1.0", "registry-1.0", "resolution-1.0", "review-1.0",
+        "workqueue-1.0",
     ]
 
 

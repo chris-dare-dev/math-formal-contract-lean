@@ -34,14 +34,22 @@ apart because their remedies differ:
 * digest misses, `decl` **absent** — rename *and* restatement at once. Nothing
   mechanical can tell which declaration was meant; a human must adjudicate.
 
-## What this command cannot do yet
+## The work queue is now a file, not only a rule
 
-`J-06` is the work queue: every registry entry with **zero inbound citations**,
-partitioned by `kind`. That is the file an agent plans against, and it is the
-one thing here that cannot be written today — there is no registry, and the set
-of `kind` values is precisely what the open size-ceiling decision is about (is
-there a `sketch` lane?). Guessing it would bake an unmade decision into a
-schema. It reports `not_run` and names the decision it waits on.
+`J-06` reports every registry entry with **zero inbound citations**, partitioned
+by `kind`. `workqueue()` writes that same set as `workqueue/1.0` — the file an
+agent plans against, rather than a line in a run nobody keeps.
+
+This was blocked on the open size-ceiling decision (is there a zero-axis
+`sketch` lane?) on the reasoning that partitioning by `kind` would bake an
+unmade decision into a schema. It does not have to: `lanes` is keyed by
+whatever `kind` actually appeared, with `propertyNames` constrained to a
+*pattern* rather than an enum of the ten `registry/1.0` knows. Adding a member
+there is then a one-schema change, and the two copies have no way to disagree
+because there is only one.
+
+`J-06` itself still reports `not_run` without `--registry`, which is unchanged:
+no registry means no queue to compute, and that is not the same as an empty one.
 """
 
 from __future__ import annotations
@@ -334,6 +342,56 @@ def claim_table(
             frontier=",".join(b.frontier) or "-",
         ))
     return rows
+
+
+def workqueue(declarations: dict, registry: dict, *,
+              registry_sha256: str, declarations_sha256: str) -> dict:
+    """Build `workqueue/1.0` — every registry entry with zero inbound cites.
+
+    The same set `J-06` reports, written down. `J-06` says *that* the queue is
+    non-empty in a run nobody keeps; this is the file an agent plans against.
+
+    **Why `join` may write this when it deliberately writes nothing else.**
+    `join` and `conformance` emit no artifact because a file carrying a
+    top-level verdict is exactly the `aggregate-verdict` rejection fixture our
+    own tooling would refuse. A work queue is an inventory: it records what is
+    owed, judges nothing, and has no axis to collapse. The rule was never "no
+    files" — it was "no aggregate verdicts" — and this respects it.
+
+    Lanes are keyed by whatever `kind` actually appeared, never by a re-declared
+    enum, so the open size-ceiling decision (does a zero-axis `sketch` lane
+    exist?) changes `registry/1.0` alone and leaves this schema untouched.
+
+    Counted per lane and never totalled, for the reason `J-06` gives.
+    """
+    cited = {b.key for b in bindings(declarations)}
+    lanes: dict[str, dict] = {}
+
+    for key, entry in sorted(registry_entries(registry).items()):
+        if key in cited:
+            continue
+        lane = lanes.setdefault(kind_of(entry), {"count": 0, "entries": []})
+        lane["count"] += 1
+        lane["entries"].append({
+            "key": key,
+            "title": entry.get("title") or key,
+            "note": entry.get("note"),
+            "frontier_open": open_frontier(entry),
+            "depends_on": list(entry.get("depends_on") or []),
+        })
+
+    return {
+        "schema_version": "workqueue/1.0",
+        "registry_id": registry.get("registry_id"),
+        "registry_sha256": registry_sha256,
+        "declarations_sha256": declarations_sha256,
+        # Sorted, like every other collection this package emits (E-10's rule
+        # for `axioms` and `local_deps`). Insertion order here would already be
+        # deterministic, so this is for the diff rather than for reproducibility:
+        # a lane appearing or emptying should move one hunk, not reshuffle the
+        # file.
+        "lanes": {kind: lanes[kind] for kind in sorted(lanes)},
+    }
 
 
 class Coverage(NamedTuple):

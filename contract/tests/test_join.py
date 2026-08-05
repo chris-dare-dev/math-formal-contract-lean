@@ -15,13 +15,21 @@ from pathlib import Path
 import pytest
 
 from contract.mfc.cli import EXIT_FINDINGS, EXIT_OK, EXIT_USAGE, main
-from contract.mfc.join import NOT_APPLICABLE, NOT_RUN, claim_table, coverage
+from contract.mfc.digest import file_digest
+from contract.mfc.join import (
+    NOT_APPLICABLE,
+    NOT_RUN,
+    claim_table,
+    coverage,
+    workqueue,
+)
 from contract.mfc.join import check as join_check
 from contract.mfc.rules import Status
 
 HERE = Path(__file__).resolve().parent
 VALID_DIR = HERE.parent / "testdata" / "artifacts" / "valid"
 REVIEW_DIR = HERE.parent / "testdata" / "reviews"
+SCHEMA_DIR = HERE.parent / "mfc" / "schema"
 
 KEY_A = "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2"
 KEY_B = "stmt:9f4c1a20b7d3:bridgeland2007.prop-8.1"
@@ -343,6 +351,131 @@ def test_a_foreign_env_review_is_not_a_finding() -> None:
     assert statuses["J-01"] is Status.PASS
     assert statuses["J-02"] is Status.PASS
     assert statuses["J-03"] is Status.PASS
+
+
+# --- the work queue: the same set J-06 reports, written down --------------------
+
+def _registry_fixture() -> dict:
+    return json.loads((VALID_DIR / "registry-1.0.json").read_text(encoding="utf-8"))
+
+
+def _queue(decls: dict, registry: dict) -> dict:
+    return workqueue(decls, registry, registry_sha256="a" * 64,
+                     declarations_sha256="b" * 64)
+
+
+def test_the_queue_is_exactly_the_uncited_entries() -> None:
+    registry = _registry_fixture()
+    cited = "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2"
+    decls = _declarations([_decl("Topic.thm", DIGEST_A, [_cite(cited)])])
+
+    q = _queue(decls, registry)
+    queued = {e["key"] for lane in q["lanes"].values() for e in lane["entries"]}
+
+    assert cited not in queued, "a cited entry is not owed"
+    assert queued == set(registry["entries"]) - {cited}
+
+
+def test_the_queue_carries_no_total_at_any_level() -> None:
+    """J-06's rule, as a property of the artifact rather than of the report.
+
+    90 in one lane and 10 in another is not "100 things to do" -- they are
+    different work needing different people, and one number would license
+    planning against the sum.
+    """
+    q = _queue(_declarations([_decl("Topic.thm", DIGEST_A, [])]), _registry_fixture())
+
+    assert "count" not in q and "total" not in q and "counts" not in q
+    assert all(set(lane) == {"count", "entries"} for lane in q["lanes"].values())
+    assert all(lane["count"] == len(lane["entries"]) for lane in q["lanes"].values())
+
+
+def test_the_queue_is_an_inventory_and_never_a_verdict() -> None:
+    """Why `join` may write this when it deliberately writes nothing else."""
+    q = _queue(_declarations([_decl("Topic.thm", DIGEST_A, [])]), _registry_fixture())
+    banned = {"status", "verdict", "score", "trusted", "verified", "ok",
+              "passed", "result", "clean", "confidence", "valid", "success"}
+
+    assert not banned & set(q)
+    for lane in q["lanes"].values():
+        for entry in lane["entries"]:
+            assert not banned & set(entry)
+
+
+def test_lanes_are_not_a_second_copy_of_the_kind_enum(tmp_path: Path) -> None:
+    """The whole reason this was not blocked on the size-ceiling decision.
+
+    `lanes` is keyed by whatever kind appeared, with `propertyNames` a pattern
+    rather than an enum of the ten `registry/1.0` knows. A future zero-axis
+    `sketch` lane is then a one-schema change, and the two copies cannot
+    disagree because there is only one.
+    """
+    schema = json.loads((SCHEMA_DIR / "workqueue-1.0.schema.json")
+                        .read_text(encoding="utf-8"))
+    lanes = schema["properties"]["lanes"]
+
+    assert "enum" not in lanes["propertyNames"]
+    assert lanes["propertyNames"]["pattern"]
+
+    registry = _registry_fixture()
+    (key, entry), = list(registry["entries"].items())[:1]
+    entry["kind"] = "sketch"          # not in registry/1.0's enum today
+    q = _queue(_declarations([_decl("Topic.thm", DIGEST_A, [])]), registry)
+
+    assert "sketch" in q["lanes"], "an unknown kind must still get a lane"
+
+    p = tmp_path / "workqueue.json"
+    p.write_text(json.dumps(q, indent=2), encoding="utf-8")
+    assert main(["validate", str(p)]) == EXIT_OK, (
+        "a lane the kind enum does not know must still validate, or this "
+        "schema is blocked on the size-ceiling decision after all")
+
+
+def test_an_entry_can_be_uncited_and_blocked_at_once() -> None:
+    """Two different queues to work from; the frontier is not folded away."""
+    q = _queue(_declarations([_decl("Topic.thm", DIGEST_A, [])]), _registry_fixture())
+    entries = {e["key"]: e for lane in q["lanes"].values() for e in lane["entries"]}
+
+    blocked = entries["stmt:9f4c1a20b7d3:obl-stab-action"]
+    assert blocked["frontier_open"] == ["gltilde-universal-cover"]
+    assert entries["stmt:9f4c1a20b7d3:bridgeland2007.prop-8.1"]["frontier_open"] == []
+
+
+def test_the_queue_is_byte_reproducible_from_its_inputs() -> None:
+    """No timestamp, on purpose, so `git diff --exit-code attest/` means
+    something. Lanes sorted so a lane emptying moves one hunk."""
+    decls = _declarations([_decl("Topic.thm", DIGEST_A, [])])
+    first = _queue(decls, _registry_fixture())
+    second = _queue(decls, _registry_fixture())
+
+    assert json.dumps(first) == json.dumps(second)
+    assert list(first["lanes"]) == sorted(first["lanes"])
+
+
+def test_cli_refuses_a_workqueue_without_a_registry(tmp_path: Path) -> None:
+    """An empty queue and a queue nobody computed are different files, and only
+    one of them means nothing is owed."""
+    p = _write(tmp_path)
+    rc = main(["join", "--declarations", str(p["declarations"]),
+               "--workqueue-out", str(tmp_path / "workqueue.json")])
+
+    assert rc == EXIT_USAGE
+    assert not (tmp_path / "workqueue.json").exists(), "refused, not written empty"
+
+
+def test_cli_writes_a_queue_that_validates(tmp_path: Path) -> None:
+    p = _write(tmp_path)
+    registry = tmp_path / "registry.json"
+    registry.write_text(json.dumps(_registry_fixture(), indent=2), encoding="utf-8")
+    out = tmp_path / "attest" / "workqueue.json"
+
+    main(["join", "--declarations", str(p["declarations"]),
+          "--registry", str(registry), "--workqueue-out", str(out)])
+
+    assert main(["validate", str(out)]) == EXIT_OK
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["registry_sha256"] == file_digest(registry)
+    assert doc["declarations_sha256"] == file_digest(p["declarations"])
 
 
 def test_no_column_is_a_verdict() -> None:

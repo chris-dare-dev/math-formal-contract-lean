@@ -170,6 +170,10 @@ deliberately does not, because there is nowhere honest to put one — a
 `conformance.json` carrying a top-level verdict *is* the `aggregate-verdict`
 rejection fixture, mechanically produced by our own tool.
 
+Read that as "no aggregate verdicts", not "no files". `join --workqueue-out`
+writes `workqueue/1.0` and does not breach this, because a work queue judges
+nothing — see [`join`](#j-06-computes-the-queue-workqueue-out-writes-it-down).
+
 So the output is a report and an exit code, and the reviewable object is an
 evidence table:
 
@@ -324,12 +328,12 @@ reported. The two failure modes are kept apart because their remedies differ:
 `J-03` refuses to merge disagreeing reviews of one statement. Deduping them
 would pick a winner, and the point is that a person has to.
 
-### `J-06` is implemented; the *artifact* is what waits on the decision
+### `J-06` computes the queue; `--workqueue-out` writes it down
 
 The work queue — every registry entry with **zero inbound citations**,
 partitioned by `kind`, with each entry's open frontier rolled up — is the file
-an agent plans against. The rule now computes it, and hand it a registry
-document and it runs:
+an agent plans against. The rule computes it, and hand it a registry document
+and it runs:
 
 ```
    FAIL  J-06  the obligation lane: registry entries with no citation
@@ -341,12 +345,52 @@ Counted **per kind and never totalled**. A queue of 90 entries in one lane and
 10 in another is not "100 things to do", and a single total is the one number
 that makes the file unplannable.
 
-What still waits on the open size-ceiling decision is the registry *schema* —
-whether there is a `sketch` lane, and whether the entry count is capped. Adding
-an enum member is a MINOR bump that flows through `kind` untouched, so the
-accessor above is decision-independent; `--registry` is still passed through
-**unvalidated** and the run says so, because there is no `registry-1.0.schema.json`
-in this build.
+`mfc join --registry … --workqueue-out attest/workqueue.json` writes that set as
+`workqueue/1.0`, the eighth artifact:
+
+```json
+{
+  "schema_version": "workqueue/1.0",
+  "registry_id": "9f4c1a20b7d3",
+  "registry_sha256": "8c8ec3dd…",
+  "declarations_sha256": "0cfb36c2…",
+  "lanes": {
+    "obligation": {
+      "count": 1,
+      "entries": [
+        { "key": "stmt:9f4c1a20b7d3:obl-stab-action",
+          "title": "Show the action is free",
+          "note": "Owed: no declaration yet asserts freeness…",
+          "frontier_open": ["gltilde-universal-cover"],
+          "depends_on": [] }
+      ]
+    }
+  }
+}
+```
+
+**Why this may be written when `conformance` writes nothing.** The rule was
+never "no files" — it was "no aggregate verdicts". A queue is an *inventory*: it
+records what is owed, judges nothing, and has no axis to collapse. There is no
+field it could carry that would make one, and `test_the_queue_is_an_inventory_and_never_a_verdict`
+holds it to that.
+
+**Why it did not have to wait for the size-ceiling decision.** The stated
+blocker was that partitioning by `kind` would bake an unmade decision (is there
+a zero-axis `sketch` lane?) into a schema. It does not have to: `lanes` is keyed
+by whatever kind actually appeared, with `propertyNames` a *pattern* rather than
+an enum of the ten `registry/1.0` knows. Adding a member there is a one-schema
+MINOR bump, and the two copies cannot disagree because there is only one.
+`test_lanes_are_not_a_second_copy_of_the_kind_enum` puts a `sketch` lane through
+`mfc validate` today, before the decision exists.
+
+**No timestamp**, so the file is byte-reproducible from two digested inputs and
+`git diff --exit-code attest/` means something. Lanes are sorted, so a lane
+appearing or emptying moves one hunk instead of reshuffling the file.
+
+Refused rather than written empty without `--registry`: a queue with no lanes
+and a queue nobody computed are different files, and only one of them means
+nothing is owed.
 
 ### The accessor was wrong for three rules at once
 

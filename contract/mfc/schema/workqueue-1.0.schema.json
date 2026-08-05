@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/workqueue-1.0.schema.json",
+  "title": "workqueue/1.0 - what is owed, partitioned, never totalled",
+  "$comment": "The obligation lane, made a tracked object instead of a TODO comment. Every registry entry with ZERO inbound @[cites], grouped by kind. This is the file an agent plans against.\n\nIt is an INVENTORY, not a verdict, and that distinction is why `join` may write it at all: `join` and `conformance` deliberately emit no artifact, because a file carrying a top-level verdict is precisely the `aggregate-verdict` rejection fixture. Nothing here judges anything. There is no axis, no level, and no field this schema could add that would make one.\n\nNo timestamp, on purpose. Every field is derived from two digested inputs, so the file is byte-reproducible and `git diff --exit-code attest/` means something.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "registry_id",
+    "registry_sha256",
+    "declarations_sha256",
+    "lanes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "workqueue/1.0"
+    },
+    "registry_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "registry_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "$comment": "Same freshness mechanism as resolution/1.0: one comparison, no clocks. Editing the registry without regenerating the queue is detectable."
+    },
+    "declarations_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "$comment": "The citations side. A queue is a claim about what is UNCITED, so it is only as current as the declarations it read."
+    },
+    "lanes": {
+      "type": "object",
+      "$comment": "Keyed by the registry entry's `kind`. Deliberately NOT an enum of the kinds registry/1.0 knows: the open size-ceiling decision may add a member (a zero-axis `sketch` lane), and re-declaring the set here would make that a two-schema change and give the two copies a way to disagree. A lane is whatever kind actually appeared.",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "count",
+          "entries"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "$comment": "PER LANE, and there is no total anywhere in this artifact. A queue of 90 in one lane and 10 in another is not '100 things to do' -- the lanes are different work needing different people, and one number would license planning against the sum."
+          },
+          "entries": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/item"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "citationKey": {
+      "type": "string",
+      "pattern": "^stmt:[0-9a-f]{12}:[a-z][a-z0-9._-]{0,63}$"
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "title",
+        "frontier_open",
+        "depends_on"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/citationKey"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "Carried so the queue is readable without opening the registry. It is a copy, and the digests above are what makes a stale copy detectable."
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "$comment": "The registry's own note. For an obligation this is what is owed, which R-09 already requires be present."
+        },
+        "frontier_open": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "$comment": "Undischarged frontier ids only, from `open_frontier`. An entry can be uncited AND blocked, and those are different queues to work from."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/citationKey"
+          },
+          "$comment": "Kept whole rather than filtered to uncited deps: an agent planning an order needs the real predecessors, and a partial list would read as a complete one."
+        }
+      }
+    }
+  }
+}

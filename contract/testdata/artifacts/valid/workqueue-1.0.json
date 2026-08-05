@@ -1,0 +1,57 @@
+{
+  "schema_version": "workqueue/1.0",
+  "registry_id": "9f4c1a20b7d3",
+  "registry_sha256": "8c8ec3dd70188cb5b9826fa4b1fd8014c0436cd991c517f3e29d58ff5e822cce",
+  "declarations_sha256": "0cfb36c2cd8e7ad3613e7e6ebb0434c7ef9c8412d7d95e73266794e0f09a27e7",
+  "lanes": {
+    "lemma": {
+      "count": 1,
+      "entries": [
+        {
+          "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2",
+          "title": "Compatible pairs act on stability conditions",
+          "note": null,
+          "frontier_open": [
+            "gltilde-universal-cover"
+          ],
+          "depends_on": []
+        }
+      ]
+    },
+    "obligation": {
+      "count": 1,
+      "entries": [
+        {
+          "key": "stmt:9f4c1a20b7d3:obl-stab-action",
+          "title": "Show the action is free",
+          "note": "Owed: no declaration yet asserts freeness. Blocked on the GLTilde fibre identification.",
+          "frontier_open": [
+            "gltilde-universal-cover"
+          ],
+          "depends_on": []
+        }
+      ]
+    },
+    "proposition": {
+      "count": 2,
+      "entries": [
+        {
+          "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.3",
+          "title": "Slicings are determined by their phases",
+          "note": null,
+          "frontier_open": [],
+          "depends_on": []
+        },
+        {
+          "key": "stmt:9f4c1a20b7d3:bridgeland2007.prop-8.1",
+          "title": "The slicing determines the phase function",
+          "note": null,
+          "frontier_open": [],
+          "depends_on": [
+            "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2"
+          ]
+        }
+      ]
+    }
+  }
+}

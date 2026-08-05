@@ -29,12 +29,13 @@ from typing import Any
 from .bundle import BundleError, build_declarations, dumps
 from .conformance import check as conformance_check
 from .conformance import evidence_table, gather
+from .digest import file_digest
 from .ilean import DEFAULT_BUILD_DIR, IleanError
 from .ilean import check as ilean_check
 from .ilean import coverage as ilean_coverage
 from .ilean import load_modules
 from .join import check as join_check
-from .join import claim_table, coverage
+from .join import claim_table, coverage, workqueue
 from .registry import RegistryShapeError
 from .rules_registry import check as registry_check
 from .rules_registry import mint_registry_id
@@ -425,6 +426,26 @@ def cmd_join(args: argparse.Namespace) -> int:
                          registry=docs.get("registry"))
     rc = _report(results, args.require_all)
 
+    if args.workqueue_out:
+        if "registry" not in docs:
+            # Refused, not written empty. A queue with no lanes and a queue
+            # nobody computed are different files, and only one of them means
+            # there is nothing owed.
+            print("error: --workqueue-out needs --registry; a queue cannot be "
+                  "computed from citations alone, and writing an empty one "
+                  "would read as 'nothing is owed'", file=sys.stderr)
+            return EXIT_USAGE
+        queue = workqueue(
+            docs["declarations"], docs["registry"],
+            registry_sha256=file_digest(paths["registry"]),
+            declarations_sha256=file_digest(paths["declarations"]))
+        out = Path(args.workqueue_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(queue, indent=2) + "\n", encoding="utf-8")
+        lanes = ", ".join(f"{k}: {v['count']}"
+                          for k, v in sorted(queue["lanes"].items()))
+        print(f"\nwrote {out} -- {lanes or 'every entry is cited; no lanes'}")
+
     rows = claim_table(docs["declarations"], review=docs.get("review"),
                        resolution=docs.get("resolution"),
                        environment=docs.get("environment"))
@@ -684,7 +705,10 @@ def build_parser() -> argparse.ArgumentParser:
                                            "columns read not_run")
     joi.add_argument("--resolution", help="path to resolution.json; enables J-04, J-05")
     joi.add_argument("--registry", help="path to the registry; enables J-06 "
-                                        "(no registry schema exists yet)")
+                                        "and --workqueue-out")
+    joi.add_argument("--workqueue-out", dest="workqueue_out",
+                     help="write workqueue/1.0 here: every registry entry with "
+                          "zero inbound cites, by kind. Needs --registry")
     joi.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     joi.set_defaults(func=cmd_join)
