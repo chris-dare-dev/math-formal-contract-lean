@@ -16,7 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath, PureWindowsPath
 
 import pytest
 
@@ -239,7 +239,7 @@ def test_cli_prints_what_it_did_not_do(
 REQUIRE_LAKE = "MFC_REQUIRE_LAKE"
 
 
-def _localize_lakefile(text: str, repo: Path) -> str:
+def _localize_lakefile(text: str, repo: PurePath) -> str:
     """Drop the mathlib require and point MathFormalContract at a local path.
 
     Two Windows hazards live in these four lines, and both are invisible on
@@ -265,9 +265,17 @@ def test_localizing_the_lakefile_survives_a_windows_repo_path() -> None:
     `test_the_generated_repository_survives_the_whole_chain` catches this too,
     but only on a machine with lake installed AND a backslashed repo path, so
     it reads as a pass on every POSIX box. This one runs everywhere.
+
+    `PureWindowsPath`, not `Path`, and that is the whole trick. `Path` is the
+    host's flavour: on Linux `Path(r"C:\\Users\\x")` is a single filename with
+    literal backslashes in it, `as_posix()` is a no-op, and the test asserts
+    something that was never going to be true. The first version of this guard
+    made exactly that mistake and went red in CI having passed on Windows --
+    which is the same platform-shaped blind spot it exists to catch, pointed
+    the other way.
     """
     rendered = render(_answers())["lakefile.toml"]
-    out = _localize_lakefile(rendered, Path(r"C:\Users\cedar\Unicode\Nope"))
+    out = _localize_lakefile(rendered, PureWindowsPath(r"C:\Users\cedar\Unicode\Nope"))
 
     assert 'path = "C:/Users/cedar/Unicode/Nope"' in out
     assert "\\U" not in out, "a backslash reached the lakefile as a TOML escape"
