@@ -239,6 +239,42 @@ def test_cli_prints_what_it_did_not_do(
 REQUIRE_LAKE = "MFC_REQUIRE_LAKE"
 
 
+def _localize_lakefile(text: str, repo: Path) -> str:
+    """Drop the mathlib require and point MathFormalContract at a local path.
+
+    Two Windows hazards live in these four lines, and both are invisible on
+    POSIX because a POSIX path contains no backslash:
+
+    - `re.sub`'s replacement argument is a *template*, so a literal
+      `C:\\Users\\...` raises `re.error: bad escape \\U`. The replacement is a
+      callable here, which is substituted verbatim with no template parsing.
+    - TOML basic strings take backslash escapes too, so even a successful
+      substitution would hand lake an unparseable lakefile. `as_posix()` keeps
+      the path valid TOML; lake accepts forward slashes on Windows.
+    """
+    text = re.sub(r'\[\[require\]\]\nname = "mathlib".*?\n\n', "", text, flags=re.S)
+    require = (f'[[require]]\nname = "MathFormalContract"\n'
+               f'path = "{repo.as_posix()}"\n')
+    return re.sub(r'\[\[require\]\]\nname = "MathFormalContract"\ngit = .*?\nrev = .*?\n',
+                  lambda _: require, text)
+
+
+def test_localizing_the_lakefile_survives_a_windows_repo_path() -> None:
+    """The regression guard for the bug above; it does not need lake.
+
+    `test_the_generated_repository_survives_the_whole_chain` catches this too,
+    but only on a machine with lake installed AND a backslashed repo path, so
+    it reads as a pass on every POSIX box. This one runs everywhere.
+    """
+    rendered = render(_answers())["lakefile.toml"]
+    out = _localize_lakefile(rendered, Path(r"C:\Users\cedar\Unicode\Nope"))
+
+    assert 'path = "C:/Users/cedar/Unicode/Nope"' in out
+    assert "\\U" not in out, "a backslash reached the lakefile as a TOML escape"
+    assert 'name = "mathlib"' not in out
+    assert "git = " not in out, "the git require survived the swap"
+
+
 def _lake_or_skip() -> None:
     if shutil.which("lake"):
         return
@@ -266,14 +302,15 @@ def test_the_generated_repository_survives_the_whole_chain(tmp_path: Path) -> No
     assert main(_argv(dest, **{"--toolchain": toolchain})) == EXIT_OK
 
     lakefile = dest / "lakefile.toml"
-    text = lakefile.read_text(encoding="utf-8")
-    text = re.sub(r'\[\[require\]\]\nname = "mathlib".*?\n\n', "", text, flags=re.S)
-    text = re.sub(r'\[\[require\]\]\nname = "MathFormalContract"\ngit = .*?\nrev = .*?\n',
-                  f'[[require]]\nname = "MathFormalContract"\npath = "{REPO}"\n', text)
-    lakefile.write_text(text, encoding="utf-8")
+    lakefile.write_text(_localize_lakefile(lakefile.read_text(encoding="utf-8"), REPO),
+                        encoding="utf-8")
     shutil.copy(REPO / "lean-toolchain", dest / "lean-toolchain")
 
-    env = {**os.environ, "PATH": f"{Path.home()}/.elan/bin:{os.environ['PATH']}"}
+    # os.pathsep, not ":" -- on Windows a ":" join fuses the elan entry to the
+    # first real PATH entry and takes system32 out with it, so `lake` stops
+    # resolving even though _lake_or_skip just found it.
+    elan = Path.home() / ".elan" / "bin"
+    env = {**os.environ, "PATH": f"{elan}{os.pathsep}{os.environ['PATH']}"}
     build = subprocess.run(["lake", "build"], cwd=dest, env=env,
                            capture_output=True, text=True, timeout=600)
     assert build.returncode == 0, f"the generated repository does not build:\n{build.stderr}"
