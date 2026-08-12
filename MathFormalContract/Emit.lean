@@ -51,7 +51,7 @@ produce byte-identical output except for `emitted_at`.
 
 ## No digests
 
-Lean core at v4.29.0 ships no SHA-256, and Lake's `Hash` is a 64-bit
+Lean core at v4.32.1 ships no SHA-256, and Lake's `Hash` is a 64-bit
 non-cryptographic value that is not portable across toolchains. All contract
 digests are computed downstream by `mfc`, from these bytes, so canonicalization
 lives in exactly one language.
@@ -139,7 +139,9 @@ the emitter must not acquire a formatting dependency, and a wrong format
 specifier fails at *runtime* in `Std.Time` where a wrong field access fails at
 compile time. -/
 def isoUtcNow : IO String := do
-  let dt := (← Std.Time.Timestamp.now).toPlainDateTimeAssumingUTC
+  let dt :=
+    (Std.Time.DateTime.ofTimestampWithZone
+      (← Std.Time.Timestamp.now) Std.Time.TimeZone.UTC).toPlainDateTime
   return s!"{dt.date.year.toInt}-{pad2 dt.date.month.toNat}-{pad2 dt.date.day.toNat}\
 T{pad2 dt.time.hour.toNat}:{pad2 dt.time.minute.toNat}:{pad2 dt.time.second.toNat}Z"
 
