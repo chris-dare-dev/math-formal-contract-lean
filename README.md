@@ -81,7 +81,7 @@ built it. Reading the ambient options instead makes the record report the
 renders that file and `lakefile.toml` from the same answers, and `mfc lint`
 fails a mismatch.
 
-The emission carries **no digests**. Lean core at v4.29.0 ships no SHA-256, and
+The emission carries **no digests**. Lean core at v4.32.1 ships no SHA-256, and
 Lake's `Hash` is a 64-bit non-cryptographic value that is not portable across
 toolchains, so all canonicalization lives downstream in one language.
 
