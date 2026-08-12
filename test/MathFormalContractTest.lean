@@ -3,6 +3,7 @@ Copyright (c) 2026 Chris Dare. All rights reserved.
 Released under the MIT license.
 -/
 import MathFormalContract
+import MathFormalContractTest.MultiRootFixture
 
 /-!
 # Tests for `@[cites]`
@@ -246,6 +247,23 @@ run_cmd Lean.Elab.Command.liftTermElabM do
     unless mods.contains m.toName do
       throwError "constant emitted from out-of-scope module {m}"
   logInfo s!"emission: {cs.size} constants across {mods.size} in-scope modules"
+
+/-! ## A monorepo scope is the union of its constituent module roots -/
+
+run_cmd Lean.Elab.Command.liftTermElabM do
+  let env ← Lean.getEnv
+  let mods := MathFormalContract.inScopeModulesForRoots env
+    [`MathFormalContract, `MathFormalContractTest]
+  unless mods.contains `MathFormalContract &&
+      mods.contains `MathFormalContractTest.MultiRootFixture do
+    throwError "multi-root module scope omitted a constituent root"
+  let (doc, sorryN) ← MathFormalContract.emitJsonForRoots
+    `MathFormalContract [`MathFormalContractTest] [] "FIXED"
+  let .ok cs := (doc.getObjValD "constants").getArr? | throwError "no constants[]"
+  if cs.isEmpty then
+    throwError "multi-root emission swept 0 constants -- the vacuous pass"
+  unless sorryN == 0 do
+    throwError "multi-root emission reports {sorryN} sorry-backed constant(s)"
 
 #cites_dump
 

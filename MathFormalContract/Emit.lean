@@ -185,11 +185,17 @@ private structure Stats where
   privateN  : Nat := 0
   sorryN    : Nat := 0
 
+/-- The module set in scope for one or more library roots: each root module and
+everything below it. A topic monorepo can therefore keep a thin combined
+umbrella while sweeping the declarations owned by each constituent library. -/
+def inScopeModulesForRoots (env : Environment) (roots : List Name) : Std.HashSet Name :=
+  env.header.moduleNames.foldl (init := {}) fun s m =>
+    if roots.any fun root => m == root || root.isPrefixOf m then s.insert m else s
+
 /-- The module set in scope for `rootLib`: the root module itself and
 everything under it. -/
 def inScopeModules (env : Environment) (rootLib : Name) : Std.HashSet Name :=
-  env.header.moduleNames.foldl (init := {}) fun s m =>
-    if m == rootLib || rootLib.isPrefixOf m then s.insert m else s
+  inScopeModulesForRoots env [rootLib]
 
 /-- Build the `emission/1.0` document over the ambient environment.
 
@@ -212,13 +218,14 @@ its own `lakefile.toml` sets it `false`. A trust record whose first job is to
 stop false claims must not open with one. So the caller declares them, in the
 same generated file that a topic's `lakefile.toml` is rendered beside, and
 `mfc lint` cross-checks the two. -/
-def emitJson (rootLib : Name) (leanOptions : List (String × Json))
-    (emittedAt : String) : MetaM (Json × Nat) := do
+def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
+    (leanOptions : List (String × Json)) (emittedAt : String) : MetaM (Json × Nat) := do
   let env ← getEnv
   let allMods := env.header.moduleNames
-  let mods := inScopeModules env rootLib
+  let roots := rootLib :: additionalRoots
+  let mods := inScopeModulesForRoots env roots
   if mods.isEmpty then
-    throwError "mfc-emit: root library {rootLib} matched ZERO modules. An empty \
+    throwError "mfc-emit: library roots {roots} matched ZERO modules. An empty \
       scope is the observable signature of a misconfigured emitter and must not \
       produce a passing artifact. Modules present: {allMods.size}."
   -- Index by module rather than walking `env.constants`. Once a topic library
@@ -229,6 +236,10 @@ def emitJson (rootLib : Name) (leanOptions : List (String × Json))
   for i in [0 : allMods.size] do
     if mods.contains allMods[i]! then
       names := names ++ env.header.moduleData[i]!.constNames
+  if names.isEmpty then
+    throwError "mfc-emit: library roots {roots} matched {mods.size} module(s) but \
+      ZERO constants. A declaration-free umbrella is not a complete topic scope; \
+      pass its constituent library roots explicitly."
   let cites := citesEntries env
   -- Carried as `(name, json)` pairs so the final sort reads the name directly
   -- rather than projecting it back out of the JSON — `Json.getStr!` does not
@@ -329,6 +340,11 @@ def emitJson (rootLib : Name) (leanOptions : List (String × Json))
     ("emitted_at", Json.str emittedAt)]
   return (doc, st.sorryN)
 
+/-- Build `emission/1.0` for a conventional single-root library. -/
+def emitJson (rootLib : Name) (leanOptions : List (String × Json))
+    (emittedAt : String) : MetaM (Json × Nat) :=
+  emitJsonForRoots rootLib [] leanOptions emittedAt
+
 /-! ## Driver -/
 
 /-- Import `rootLib`, sweep it, and write `emission/1.0` to `outPath`.
@@ -340,8 +356,8 @@ must still produce an honest artifact saying "three constants here depend on
 `sorryAx`" — that record is most useful exactly when the build is not clean,
 and refusing to write it would leave the obligation queue empty at the only
 moment it matters. -/
-private unsafe def emitToFileImpl (rootLib : Name) (leanOptions : List (String × Json))
-    (outPath : System.FilePath) : IO UInt32 := do
+private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : List Name)
+    (leanOptions : List (String × Json)) (outPath : System.FilePath) : IO UInt32 := do
   initSearchPath (← findSysroot)
   -- Lets imported modules' `initialize` blocks run. Required for a topic repo
   -- whose upstream registers attributes this binary does not statically link.
@@ -384,7 +400,8 @@ private unsafe def emitToFileImpl (rootLib : Name) (leanOptions : List (String �
       maxHeartbeats := 0 }
   let coreSt : Core.State := { env }
   let result ← try
-      let ((doc, sorryN), _, _) ← (emitJson rootLib leanOptions emittedAt).toIO ctx coreSt
+      let ((doc, sorryN), _, _) ←
+        (emitJsonForRoots rootLib additionalRoots leanOptions emittedAt).toIO ctx coreSt
       pure (Except.ok (doc, sorryN))
     catch e => pure (Except.error (toString e))
   match result with
@@ -411,9 +428,15 @@ private unsafe def emitToFileImpl (rootLib : Name) (leanOptions : List (String �
 reads empty environment extensions; forcing every consumer to write `unsafe def
 main` would push that detail into the three lines a topic repo generates, which
 are meant to be the one piece of Lean nobody has to think about. -/
-@[implemented_by emitToFileImpl]
-opaque emitToFile (rootLib : Name) (leanOptions : List (String × Json))
+@[implemented_by emitToFileForRootsImpl]
+opaque emitToFileForRoots (rootLib : Name) (additionalRoots : List Name)
+    (leanOptions : List (String × Json))
     (outPath : System.FilePath) : IO UInt32
+
+/-- Import and sweep a conventional single-root library. -/
+def emitToFile (rootLib : Name) (leanOptions : List (String × Json))
+    (outPath : System.FilePath) : IO UInt32 :=
+  emitToFileForRoots rootLib [] leanOptions outPath
 
 private def usage : String :=
   "usage: <emitter> [--out <path>]\n  --out <path>  emission destination \
@@ -434,6 +457,15 @@ def emitMain (rootLib : Name) (leanOptions : List (String × Json))
   match args with
   | [] => emitToFile rootLib leanOptions "attest/lean-emission.json"
   | ["--out", p] => emitToFile rootLib leanOptions p
+  | _ => IO.eprintln usage; return 2
+
+/-- The entry point for a monorepo whose combined root is a declaration-free
+umbrella. `additionalRoots` names the constituent module trees to include. -/
+def emitMainForRoots (rootLib : Name) (additionalRoots : List Name)
+    (leanOptions : List (String × Json)) (args : List String) : IO UInt32 := do
+  match args with
+  | [] => emitToFileForRoots rootLib additionalRoots leanOptions "attest/lean-emission.json"
+  | ["--out", p] => emitToFileForRoots rootLib additionalRoots leanOptions p
   | _ => IO.eprintln usage; return 2
 
 end MathFormalContract
