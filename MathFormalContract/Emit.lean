@@ -98,9 +98,11 @@ constants came out elided, every one of them a compiler-generated `def`
 (`.noConfusion`, `.elim`, `._sparseCasesOn_N`) whose body carries proofs.
 
 `mfc lint` rule `E-07` is what found it, which is the arrangement working:
-the rule states the property, the emitter has to satisfy it. Probed one option
-at a time rather than assumed — `pp.deepTerms` and `pp.maxSteps` change nothing
-here; `pp.proofs` accounts for all five elisions in the sample.
+the rule states the property, the emitter has to satisfy it. `pp.proofs`
+accounts for proof elisions. `pp.deepTerms` and an explicit high `pp.maxSteps`
+close the two other documented omission paths. The latter matters once the
+emitter is large enough to emit its own implementation: Lean's default is only
+5,000 visited expressions, after which it inserts `⋯` into a definition body.
 
 Ambient options are *discarded* rather than extended, so a `set_option` in the
 caller cannot reach the emitted text. -/
@@ -114,6 +116,8 @@ private def ppOpts : Options :=
     |>.setBool `pp.explicit  false
     |>.setBool `pp.notation  true
     |>.setBool `pp.proofs    true
+    |>.setBool `pp.deepTerms true
+    |>.set     `pp.maxSteps  (1000000 : Nat)
     |>.set     `format.width (120 : Nat)
 
 /-- The same options as data, for the `pp_options` record. Written from one
@@ -125,6 +129,8 @@ private def ppOptsJson : Json :=
     ("pp.explicit",  Json.bool false),
     ("pp.notation",  Json.bool true),
     ("pp.proofs",    Json.bool true),
+    ("pp.deepTerms", Json.bool true),
+    ("pp.maxSteps",  Json.num 1000000),
     ("format.width", Json.num 120)]
 
 /-! ## Timestamps -/
