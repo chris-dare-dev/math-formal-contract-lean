@@ -29,7 +29,7 @@ ROOT = "Topic"
 
 def _constant(name: str, module: str) -> dict:
     return {
-        "name": name, "module": module, "kind": "theorem",
+        "name": name, "module": module, "scope": "topic", "kind": "theorem",
         "is_instance": False, "is_internal": False, "is_private": False,
         "is_reducible": False, "num_levels": 0,
         "type_pp": "True", "value_pp": None, "doc": None,
@@ -47,7 +47,7 @@ def _emission(constants: list[dict], *, root_lib: str = ROOT,
                        else sorted({c["module"] for c in constants}))
     n = len(constants)
     base["counts"] = {"total": n, "in_scope": n, "internal": 0,
-                      "with_range": 0, "instances": 0, "private": 0}
+                      "with_range": 0, "instances": 0, "private": 0, "external": 0}
     return base
 
 

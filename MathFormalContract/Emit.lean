@@ -190,6 +190,23 @@ private structure Stats where
   instances : Nat := 0
   privateN  : Nat := 0
   sorryN    : Nat := 0
+  /-- Constants named by `external_decls[]` and swept from OUTSIDE the topic's
+  module scope. Counted separately and never folded into `inScope`: an
+  external constant is a theorem someone else proved, and letting it raise
+  this repo's in-scope count would be the vacuous pass with extra steps. -/
+  external  : Nat := 0
+
+/-- Field-wise addition, so one row's tallies compose with the running total
+without every call site restating the seven fields. -/
+private def Stats.add (a b : Stats) : Stats where
+  total     := a.total + b.total
+  inScope   := a.inScope + b.inScope
+  internal  := a.internal + b.internal
+  withRange := a.withRange + b.withRange
+  instances := a.instances + b.instances
+  privateN  := a.privateN + b.privateN
+  sorryN    := a.sorryN + b.sorryN
+  external  := a.external + b.external
 
 /-- The module set in scope for one or more library roots: each root module and
 everything below it. A topic monorepo can therefore keep a thin combined
@@ -202,6 +219,109 @@ def inScopeModulesForRoots (env : Environment) (roots : List Name) : Std.HashSet
 everything under it. -/
 def inScopeModules (env : Environment) (rootLib : Name) : Std.HashSet Name :=
   inScopeModulesForRoots env [rootLib]
+
+/-- One constant's emission record, and the tallies it contributes.
+
+Extracted so the topic sweep and the `external_decls[]` sweep cannot drift.
+They differ in exactly one field — `scope` — and everything else about them
+must be identical, which this makes structural rather than a pair of code
+blocks somebody has to keep in step.
+
+An `external` row never raises `in_scope`. It is a theorem someone else proved,
+in a package `environment.json` already pins by commit; counting it as this
+repository's own work is the vacuous pass with extra steps. -/
+private def rowJson (env : Environment) (mods : Std.HashSet Name)
+    (cites : Array CitesEntry) (n : Name) (modName : Name) (ci : ConstantInfo)
+    (scope : String) : MetaM (Json × Stats) := do
+  -- SORT: `collectAxioms` output order is unspecified and observed unstable.
+  let axs := (← collectAxioms n).map (·.toString) |>.qsort (· < ·)
+  let rng ← findDeclarationRanges? n
+  let isInt := n.isInternalDetail
+  let isInst ← isInstance n
+  let isPriv := isPrivateName n
+  let isRed ← isReducible n
+  let tyStr ← withOptions (fun _ => ppOpts) do
+    pure (toString (← PrettyPrinter.ppExpr ci.type))
+  -- `value_pp` for `def` and `opaque` ONLY.
+  --
+  -- A def's body IS its statement — two defs with the same type and
+  -- different bodies are different claims, and omitting the body would let
+  -- one silently replace the other under an unchanged digest. A theorem's
+  -- body is a *proof*, and folding it in would make every proof edit read as
+  -- a statement change, which destroys the one signal review depends on.
+  let valStr : Option String ← match ci with
+    | .defnInfo v | .opaqueInfo v =>
+      withOptions (fun _ => ppOpts) do
+        pure (some (toString (← PrettyPrinter.ppExpr v.value)))
+    | _ => pure none
+  -- Read from the environment, like everything else here. `findDocString?`
+  -- reads the doc-string extension rather than the source file, so a
+  -- doc-comment cannot be hidden from this by any syntactic trick -- the
+  -- same property that makes the constant sweep immune to
+  -- `set_option ... in theorem`.
+  let docStr ← findDocString? env n
+  let deps := match ci with
+    | .defnInfo v | .opaqueInfo v =>
+      sortedNames (localConstsIn env mods ci.type ++ localConstsIn env mods v.value)
+    | _ => localConstsIn env mods ci.type
+  let myCites := cites.filter (·.declName == n)
+  let row := Json.mkObj [
+    ("name",         Json.str n.toString),
+    ("module",       Json.str modName.toString),
+    ("scope",        Json.str scope),
+    ("kind",         Json.str (kindOf ci)),
+    ("is_instance",  Json.bool isInst),
+    ("is_internal",  Json.bool isInt),
+    ("is_private",   Json.bool isPriv),
+    ("is_reducible", Json.bool isRed),
+    ("num_levels",   Json.num ci.levelParams.length),
+    ("type_pp",      Json.str tyStr),
+    ("value_pp",     match valStr with | some s => Json.str s | none => Json.null),
+    -- The doc-comment, VERBATIM, and it is the evidence for `CLAUDE.md`
+    -- section 3 rather than documentation for a reader.
+    --
+    -- Section 4's hazard is IMPORTING geometry, and `I-06` reads that off
+    -- the imports. Section 3's hazard is CLAIMING geometry you do not have,
+    -- and `abbrev NumLattice : Type := Fin 2 -> Z` imports nothing at all:
+    -- the false claim lives entirely in a doc-comment calling it a numerical
+    -- Grothendieck group of a Kuznetsov component. No artifact carried that
+    -- text before this, so no check could see the one place the claim is
+    -- made.
+    --
+    -- `null` when the declaration has no doc-string, distinct from `""`,
+    -- which is an empty doc-comment someone actually wrote.
+    ("doc",          match docStr with | some s => Json.str s | none => Json.null),
+    ("local_deps",   Json.arr (deps.map fun d => Json.str d.toString)),
+    -- Mutual-recursion groups are not yet computed; the key is present and
+    -- empty rather than absent, so a consumer never has to distinguish
+    -- "no SCC" from "this emitter version did not say".
+    ("scc_members",  Json.arr #[]),
+    ("axioms",       Json.arr (axs.map Json.str)),
+    ("range",        match rng with
+                     | some r => Json.mkObj [
+                         ("startLine", Json.num r.range.pos.line),
+                         ("startCol",  Json.num r.range.pos.column),
+                         ("endLine",   Json.num r.range.endPos.line),
+                         ("endCol",    Json.num r.range.endPos.column)]
+                     | none => Json.null),
+    ("cites", Json.arr (myCites.map fun c => Json.mkObj [
+                ("key",              Json.str c.key),
+                -- Always `relation_claimed` in a machine artifact. An agent
+                -- reading this field reads the word "claimed"; only a dated,
+                -- named human review may write `relation_confirmed`, and that
+                -- key exists in `review/1.0` alone.
+                ("relation_claimed", Json.str c.relation.toString),
+                ("frontier",         Json.arr (c.frontier.map Json.str)),
+                ("note", if c.note.isEmpty then Json.null else Json.str c.note)]))]
+  return (row, { total := 1
+                 inScope   := if isInt || scope == "external" then 0 else 1
+                 internal  := if isInt then 1 else 0
+                 withRange := if rng.isSome then 1 else 0
+                 instances := if isInst then 1 else 0
+                 privateN  := if isPriv then 1 else 0
+                 sorryN    := if axs.contains "sorryAx" then 1 else 0
+                 external  := if scope == "external" then 1 else 0 })
+
 
 /-- Build the `emission/1.0` document over the ambient environment.
 
@@ -225,6 +345,7 @@ stop false claims must not open with one. So the caller declares them, in the
 same generated file that a topic's `lakefile.toml` is rendered beside, and
 `mfc lint` cross-checks the two. -/
 def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
+    (externals : Array Name)
     (leanOptions : List (String × Json)) (emittedAt : String) : MetaM (Json × Nat) := do
   let env ← getEnv
   let allMods := env.header.moduleNames
@@ -257,93 +378,33 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
     let some ci := env.find? n | continue
     let some idx := env.getModuleIdxFor? n | continue
     let modName := allMods[idx.toNat]!
-    st := { st with total := st.total + 1 }
-    -- SORT: `collectAxioms` output order is unspecified and observed unstable.
-    let axs := (← collectAxioms n).map (·.toString) |>.qsort (· < ·)
-    if axs.contains "sorryAx" then st := { st with sorryN := st.sorryN + 1 }
-    let rng ← findDeclarationRanges? n
-    let isInt := n.isInternalDetail
-    let isInst ← isInstance n
-    let isPriv := isPrivateName n
-    let isRed ← isReducible n
-    st := { st with
-      internal  := if isInt then st.internal + 1 else st.internal
-      inScope   := if isInt then st.inScope else st.inScope + 1
-      withRange := if rng.isSome then st.withRange + 1 else st.withRange
-      instances := if isInst then st.instances + 1 else st.instances
-      privateN  := if isPriv then st.privateN + 1 else st.privateN }
-    let tyStr ← withOptions (fun _ => ppOpts) do
-      pure (toString (← PrettyPrinter.ppExpr ci.type))
-    -- `value_pp` for `def` and `opaque` ONLY.
-    --
-    -- A def's body IS its statement — two defs with the same type and
-    -- different bodies are different claims, and omitting the body would let
-    -- one silently replace the other under an unchanged digest. A theorem's
-    -- body is a *proof*, and folding it in would make every proof edit read as
-    -- a statement change, which destroys the one signal review depends on.
-    let valStr : Option String ← match ci with
-      | .defnInfo v | .opaqueInfo v =>
-        withOptions (fun _ => ppOpts) do
-          pure (some (toString (← PrettyPrinter.ppExpr v.value)))
-      | _ => pure none
-    -- Read from the environment, like everything else here. `findDocString?`
-    -- reads the doc-string extension rather than the source file, so a
-    -- doc-comment cannot be hidden from this by any syntactic trick -- the
-    -- same property that makes the constant sweep immune to
-    -- `set_option ... in theorem`.
-    let docStr ← findDocString? env n
-    let deps := match ci with
-      | .defnInfo v | .opaqueInfo v =>
-        sortedNames (localConstsIn env mods ci.type ++ localConstsIn env mods v.value)
-      | _ => localConstsIn env mods ci.type
-    let myCites := cites.filter (·.declName == n)
-    out := out.push <| (n.toString, Json.mkObj [
-      ("name",         Json.str n.toString),
-      ("module",       Json.str modName.toString),
-      ("kind",         Json.str (kindOf ci)),
-      ("is_instance",  Json.bool isInst),
-      ("is_internal",  Json.bool isInt),
-      ("is_private",   Json.bool isPriv),
-      ("is_reducible", Json.bool isRed),
-      ("num_levels",   Json.num ci.levelParams.length),
-      ("type_pp",      Json.str tyStr),
-      ("value_pp",     match valStr with | some s => Json.str s | none => Json.null),
-      -- The doc-comment, VERBATIM, and it is the evidence for `CLAUDE.md`
-      -- section 3 rather than documentation for a reader.
-      --
-      -- Section 4's hazard is IMPORTING geometry, and `I-06` reads that off
-      -- the imports. Section 3's hazard is CLAIMING geometry you do not have,
-      -- and `abbrev NumLattice : Type := Fin 2 -> Z` imports nothing at all:
-      -- the false claim lives entirely in a doc-comment calling it a numerical
-      -- Grothendieck group of a Kuznetsov component. No artifact carried that
-      -- text before this, so no check could see the one place the claim is
-      -- made.
-      --
-      -- `null` when the declaration has no doc-string, distinct from `""`,
-      -- which is an empty doc-comment someone actually wrote.
-      ("doc",          match docStr with | some s => Json.str s | none => Json.null),
-      ("local_deps",   Json.arr (deps.map fun d => Json.str d.toString)),
-      -- Mutual-recursion groups are not yet computed; the key is present and
-      -- empty rather than absent, so a consumer never has to distinguish
-      -- "no SCC" from "this emitter version did not say".
-      ("scc_members",  Json.arr #[]),
-      ("axioms",       Json.arr (axs.map Json.str)),
-      ("range",        match rng with
-                       | some r => Json.mkObj [
-                           ("startLine", Json.num r.range.pos.line),
-                           ("startCol",  Json.num r.range.pos.column),
-                           ("endLine",   Json.num r.range.endPos.line),
-                           ("endCol",    Json.num r.range.endPos.column)]
-                       | none => Json.null),
-      ("cites", Json.arr (myCites.map fun c => Json.mkObj [
-                  ("key",              Json.str c.key),
-                  -- Always `relation_claimed` in a machine artifact. An agent
-                  -- reading this field reads the word "claimed"; only a dated,
-                  -- named human review may write `relation_confirmed`, and that
-                  -- key exists in `review/1.0` alone.
-                  ("relation_claimed", Json.str c.relation.toString),
-                  ("frontier",         Json.arr (c.frontier.map Json.str)),
-                  ("note", if c.note.isEmpty then Json.null else Json.str c.note)]))])
+    let (row, delta) ← rowJson env mods cites n modName ci "topic"
+    out := out.push (n.toString, row)
+    st := st.add delta
+  -- `external_decls[]`, from the registry. Emission is module-scoped to the
+  -- topic library, correctly, which means `@[cites]` can never be attached to
+  -- `Mathlib.…` — so a topic whose paper lemma is ALREADY IN MATHLIB has to
+  -- restate it, and then the restatement's statement digest, axiom closure and
+  -- kernel replay describe THE WRAPPER rather than the theorem. Mathlib's own
+  -- `docs/1000.yaml` solves this in one line, and so does this.
+  --
+  -- Widening, never narrowing: an external name can only ADD a row, each row
+  -- is stamped `scope: external`, and none of them raises `in_scope`. That is
+  -- why this may be a caller-supplied flag when `--root` deliberately is not.
+  let emitted := out.foldl (init := Std.HashSet.emptyWithCapacity out.size)
+    fun s (k, _) => s.insert k
+  for n in externals do
+    if emitted.contains n.toString then continue
+    let some ci := env.find? n
+      | throwError "mfc-emit: external_decls names {n}, which is not in this \
+          environment. A registry that binds to a constant the build cannot see \
+          is a citation that resolves to nothing."
+    let some idx := env.getModuleIdxFor? n
+      | throwError "mfc-emit: external_decls names {n}, which has no module. \
+          Only imported constants may be bound externally."
+    let (row, delta) ← rowJson env mods cites n allMods[idx.toNat]! ci "external"
+    out := out.push (n.toString, row)
+    st := st.add delta
   -- Iteration order over modules and their constant lists is not specified.
   let sortedOut := (out.qsort fun a b => a.1 < b.1).map (·.2)
   let doc := Json.mkObj [
@@ -361,7 +422,8 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
         ("internal",   Json.num st.internal),
         ("with_range", Json.num st.withRange),
         ("instances",  Json.num st.instances),
-        ("private",    Json.num st.privateN)]),
+        ("private",    Json.num st.privateN),
+        ("external",   Json.num st.external)]),
     ("constants",  Json.arr sortedOut),
     ("emitted_at", Json.str emittedAt)]
   return (doc, st.sorryN)
@@ -369,7 +431,7 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
 /-- Build `emission/1.0` for a conventional single-root library. -/
 def emitJson (rootLib : Name) (leanOptions : List (String × Json))
     (emittedAt : String) : MetaM (Json × Nat) :=
-  emitJsonForRoots rootLib [] leanOptions emittedAt
+  emitJsonForRoots rootLib [] #[] leanOptions emittedAt
 
 /-! ## Driver -/
 
@@ -383,7 +445,8 @@ must still produce an honest artifact saying "three constants here depend on
 and refusing to write it would leave the obligation queue empty at the only
 moment it matters. -/
 private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : List Name)
-    (leanOptions : List (String × Json)) (outPath : System.FilePath) : IO UInt32 := do
+    (externals : Array Name) (leanOptions : List (String × Json))
+    (outPath : System.FilePath) : IO UInt32 := do
   initSearchPath (← findSysroot)
   -- Lets imported modules' `initialize` blocks run. Required for a topic repo
   -- whose upstream registers attributes this binary does not statically link.
@@ -427,7 +490,8 @@ private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : Li
   let coreSt : Core.State := { env }
   let result ← try
       let ((doc, sorryN), _, _) ←
-        (emitJsonForRoots rootLib additionalRoots leanOptions emittedAt).toIO ctx coreSt
+        (emitJsonForRoots rootLib additionalRoots externals leanOptions
+          emittedAt).toIO ctx coreSt
       pure (Except.ok (doc, sorryN))
     catch e => pure (Except.error (toString e))
   match result with
@@ -456,17 +520,55 @@ main` would push that detail into the three lines a topic repo generates, which
 are meant to be the one piece of Lean nobody has to think about. -/
 @[implemented_by emitToFileForRootsImpl]
 opaque emitToFileForRoots (rootLib : Name) (additionalRoots : List Name)
-    (leanOptions : List (String × Json))
+    (externals : Array Name) (leanOptions : List (String × Json))
     (outPath : System.FilePath) : IO UInt32
 
 /-- Import and sweep a conventional single-root library. -/
 def emitToFile (rootLib : Name) (leanOptions : List (String × Json))
     (outPath : System.FilePath) : IO UInt32 :=
-  emitToFileForRoots rootLib [] leanOptions outPath
+  emitToFileForRoots rootLib [] #[] leanOptions outPath
 
 private def usage : String :=
-  "usage: <emitter> [--out <path>]\n  --out <path>  emission destination \
-   (default: attest/lean-emission.json)"
+  "usage: <emitter> [--out <path>] [--externals <path>]\n" ++
+  "  --out <path>        emission destination " ++
+  "(default: attest/lean-emission.json)\n" ++
+  "  --externals <path>  JSON array of constant names from external_decls[]"
+
+/-- Read `external_decls[]` names from a JSON array of strings.
+
+A file rather than repeated flags: the list comes from the registry, is
+generated by `mfc registry external-decls`, and a shell-quoted name list is a
+place for a name to lose a component silently.
+
+Every failure here is fatal. A registry that says a topic binds to
+`Mathlib.Analysis.…` and an emitter that quietly emitted nothing for it would
+produce an artifact whose absence of evidence reads as absence of a claim. -/
+private def readExternals (path : System.FilePath) : IO (Array Name) := do
+  let text ← IO.FS.readFile path
+  let json ← IO.ofExcept <| (Json.parse text).mapError fun e =>
+    s!"mfc-emit: {path}: invalid JSON: {e}"
+  let arr ← IO.ofExcept <| json.getArr?.mapError fun _ =>
+    s!"mfc-emit: {path}: expected a JSON array of constant names"
+  arr.mapM fun j => do
+    let s ← IO.ofExcept <| j.getStr?.mapError fun _ =>
+      s!"mfc-emit: {path}: every entry must be a string constant name"
+    pure s.toName
+
+
+/-- The entry point for a monorepo whose combined root is a declaration-free
+umbrella. `additionalRoots` names the constituent module trees to include. -/
+def emitMainForRoots (rootLib : Name) (additionalRoots : List Name)
+    (leanOptions : List (String × Json)) (args : List String) : IO UInt32 := do
+  let mut out : System.FilePath := "attest/lean-emission.json"
+  let mut externals : Array Name := #[]
+  let mut rest := args
+  repeat
+    match rest with
+    | "--out" :: p :: tl => out := p; rest := tl
+    | "--externals" :: p :: tl => externals := (← readExternals p); rest := tl
+    | [] => break
+    | _ => IO.eprintln usage; return 2
+  emitToFileForRoots rootLib additionalRoots externals leanOptions out
 
 /-- The entry point a topic repo calls, with its root library and its
 elaboration options hard-coded.
@@ -479,19 +581,7 @@ did not make. Both are rendered from the same copier answers as the topic's
 `lakefile.toml`, so the two files agree by construction and `mfc lint` fails
 them if they ever stop agreeing. -/
 def emitMain (rootLib : Name) (leanOptions : List (String × Json))
-    (args : List String) : IO UInt32 := do
-  match args with
-  | [] => emitToFile rootLib leanOptions "attest/lean-emission.json"
-  | ["--out", p] => emitToFile rootLib leanOptions p
-  | _ => IO.eprintln usage; return 2
-
-/-- The entry point for a monorepo whose combined root is a declaration-free
-umbrella. `additionalRoots` names the constituent module trees to include. -/
-def emitMainForRoots (rootLib : Name) (additionalRoots : List Name)
-    (leanOptions : List (String × Json)) (args : List String) : IO UInt32 := do
-  match args with
-  | [] => emitToFileForRoots rootLib additionalRoots leanOptions "attest/lean-emission.json"
-  | ["--out", p] => emitToFileForRoots rootLib additionalRoots leanOptions p
-  | _ => IO.eprintln usage; return 2
+    (args : List String) : IO UInt32 :=
+  emitMainForRoots rootLib [] leanOptions args
 
 end MathFormalContract

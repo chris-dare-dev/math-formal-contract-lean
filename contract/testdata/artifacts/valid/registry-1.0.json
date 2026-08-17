@@ -53,7 +53,14 @@
       "supersedes": null,
       "superseded_by": null,
       "note": null,
-      "mint_unresolved_reason": null
+      "mint_unresolved_reason": null,
+      "external_decls": [
+        {
+          "name": "List.length_append",
+          "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
+          "note": "Already in Mathlib; restating it here would attest to the wrapper rather than to the theorem."
+        }
+      ]
     },
     "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.3": {
       "kind": "proposition",

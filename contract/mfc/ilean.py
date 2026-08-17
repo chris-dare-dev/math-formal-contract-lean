@@ -169,8 +169,16 @@ def check(emission: dict, modules: list[Module], *, lib: str | None = None
     """Run I-01..I-05 against an emission and the modules Lake actually built."""
     root = lib or emission.get("root_lib")
     results: list[RuleResult] = []
-    names = {c["name"] for c in emission["constants"]}
-    emission_modules = {c["module"] for c in emission["constants"]}
+    # `scope: external` rows are excluded from every rule here, and the reason
+    # is the same one that makes them safe: they are constants someone else
+    # proved, in modules Lake never built for this repository. Counting them as
+    # coverage would let a topic raise its own numbers by citing Mathlib, and
+    # feeding their modules to `I-04` would report `Init.Data.List.Basic` as a
+    # module the emitter swept out of scope -- a finding about the emitter
+    # doing exactly what it was told.
+    topic = [c for c in emission["constants"] if c.get("scope", "topic") != "external"]
+    names = {c["name"] for c in topic}
+    emission_modules = {c["module"] for c in topic}
 
     def add(rule: str, title: str, findings: list[Finding], reason: str = "") -> None:
         results.append(RuleResult(
@@ -341,7 +349,8 @@ def coverage(emission: dict, modules: list[Module], *, lib: str | None = None
     root = lib or emission.get("root_lib") or ""
     in_scope = [m for m in modules if root and is_under(m.name, root)]
     built = {d for m in in_scope for d in m.decls}
-    names = {c["name"] for c in emission["constants"]}
+    names = {c["name"] for c in emission["constants"]
+             if c.get("scope", "topic") != "external"}
     return Coverage(
         in_scope_modules=len(in_scope),
         built_declarations=len(built),

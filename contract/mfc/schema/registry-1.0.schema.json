@@ -478,6 +478,37 @@
           },
           "uniqueItems": true
         },
+        "external_decls": {
+          "type": "array",
+          "uniqueItems": true,
+          "$comment": "Constants ALREADY IN MATHLIB (or the anchor) that this entry binds to directly. Emission is module-scoped to the topic library -- correctly -- so `@[cites]` can never be attached to `Mathlib.\u2026`. Without this field a topic whose paper lemma is already formalized upstream must RESTATE it, and then the restatement's statement_digest, axiom closure and kernel replay describe the wrapper rather than the theorem, whose faithfulness to the paper is a different question from Mathlib's. Mathlib's own docs/1000.yaml solves this case in one line. Without it the architecture is useful only in the middle of the coverage range -- which is exactly where Bridgeland sits, and exactly why nobody noticed.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "env_digest"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "$comment": "The fully-qualified constant name, as the emitter will look it up."
+              },
+              "env_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "$comment": "The environment this binding was made against. A constant name alone does not identify a statement: Mathlib restates and generalises, so the same name at a later rev can be a different theorem. Pinning the env_digest is what makes `external` evidence rather than a hopeful reference."
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
         "frontier": {
           "type": "array",
           "items": {

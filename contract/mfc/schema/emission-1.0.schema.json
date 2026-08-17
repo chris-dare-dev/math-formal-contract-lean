@@ -71,7 +71,8 @@
         "internal",
         "with_range",
         "instances",
-        "private"
+        "private",
+        "external"
       ],
       "properties": {
         "total": {
@@ -97,6 +98,11 @@
         "private": {
           "type": "integer",
           "minimum": 0
+        },
+        "external": {
+          "type": "integer",
+          "minimum": 0,
+          "$comment": "Counted separately and NEVER folded into in_scope or the vacuous-pass minimums. A repo whose only non-empty count is `external` has formalized nothing and must not pass."
         }
       },
       "$comment": "minimum:1 on total and in_scope is the VACUOUS-PASS GUARD. An emission of zero constants is the observable signature of a mis-scoped emitter, and it must not validate."
@@ -119,6 +125,7 @@
       "required": [
         "name",
         "module",
+        "scope",
         "kind",
         "is_instance",
         "is_internal",
@@ -142,6 +149,13 @@
         "module": {
           "type": "string",
           "minLength": 1
+        },
+        "scope": {
+          "enum": [
+            "topic",
+            "external"
+          ],
+          "$comment": "`topic` is a declaration this repository wrote. `external` is a constant named by a registry entry's external_decls[] and swept from outside the module scope -- a theorem someone else proved, in a package environment.json already pins by commit. The distinction is load-bearing: without it a topic could raise its own in_scope count by citing Mathlib."
         },
         "kind": {
           "enum": [

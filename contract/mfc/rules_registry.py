@@ -248,7 +248,52 @@ def check(
     add("R-10", "every interface frontier item names a referent or admits none",
         r10)
 
+    # R-11 -- an external binding names an environment, and the one it names is
+    # the one this registry was minted against.
+    #
+    # A constant NAME alone does not identify a statement. Mathlib restates and
+    # generalises constantly, so `Nat.succ_le_of_lt` at one rev and the same
+    # name six months later can be different theorems with the same spelling --
+    # and a binding that did not say which rev it meant would silently follow
+    # whichever one is current. That is precisely the failure `env_digest`
+    # exists to stop everywhere else in this contract.
+    #
+    # The schema already requires the field and its shape. This checks the
+    # thing the schema cannot: that every binding agrees with every other, so a
+    # registry cannot half-migrate across a Mathlib bump and read as coherent.
+    digests = {b["env_digest"] for b in external_decls(entries) if b.get("env_digest")}
+    r11: list[Finding] = []
+    if len(digests) > 1:
+        for key, e in sorted(entries.items()):
+            for b in e.get("external_decls") or []:
+                if isinstance(b, dict) and b.get("env_digest"):
+                    r11.append(Finding(
+                        "R-11", key,
+                        f"external binding {b.get('name')!r} pins env_digest "
+                        f"{b['env_digest'][:12]}…, and this registry uses "
+                        f"{len(digests)} different environments across its "
+                        f"external bindings; they cannot all be current"))
+    add("R-11", "all external bindings pin one environment", r11)
+
     return results
+
+
+def external_decls(entries: dict) -> list[dict]:
+    """Every `external_decls[]` binding in the registry, sorted by name.
+
+    This is what `mfc registry external-decls` writes and the emitter's
+    `--externals` reads. It is a FILE rather than a flag list because the names
+    come from the registry and a shell-quoted Lean name is a place for a
+    component to go missing silently.
+    """
+    out: dict[str, dict] = {}
+    for key, entry in sorted(entries.items()):
+        for binding in entry.get("external_decls") or []:
+            if not isinstance(binding, dict) or not binding.get("name"):
+                continue
+            out.setdefault(binding["name"], {**binding, "cited_by": []})
+            out[binding["name"]]["cited_by"].append(key)
+    return [out[name] for name in sorted(out)]
 
 
 def interface_ratio(entries: dict) -> tuple[int, int]:
