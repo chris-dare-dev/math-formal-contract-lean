@@ -21,7 +21,17 @@
       "forbidden_constants": [
         "CategoryTheory.Sheaf"
       ],
+      "forbidden_vocabulary": [
+        "Kuznetsov",
+        "Enriques",
+        "D^b(Coh",
+        "Chern",
+        "Serre duality",
+        "Fourier-Mukai",
+        "semiorthogonal"
+      ],
       "note": "D^b(Coh X), Serre duality, Chern characters, HRR, numerical Grothendieck groups of varieties, SODs, Fourier-Mukai. None exist in Mathlib at the pinned commit. A reachable prefix here means someone started the multi-year program by accident."
     }
-  ]
+  ],
+  "$comment_vocabulary": "E-11, and the half of CLAUDE.md that closed_lanes did NOT mechanise. forbidden_module_prefixes catches section 4 -- importing geometry. This catches section 3 -- claiming it. `abbrev NumLattice : Type := Fin 2 -> Z` imports nothing and reaches nothing; the claim is entirely in a doc-comment. Linted against declaration names and doc-comments of declarations whose own citation records an OPEN FRONTIER, so a declaration that genuinely has the mathematics may still name it."
 }

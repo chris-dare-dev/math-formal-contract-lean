@@ -1,0 +1,66 @@
+{
+  "schema_version": "emission/1.0",
+  "root_lib": "Topic",
+  "pp_options": {
+    "pp.universes": true,
+    "pp.proofs": true,
+    "pp.notation": true,
+    "pp.fullNames": true,
+    "pp.explicit": false,
+    "format.width": 120
+  },
+  "modules": [
+    "Topic.Lattice"
+  ],
+  "lean_version": "4.29.0",
+  "lean_options": {
+    "relaxedAutoImplicit": false,
+    "autoImplicit": false
+  },
+  "lean_githash": "98dc76e3c0a9b856c9b98726b713fb04fab16740",
+  "emitter_version": "mfc-emit/1.0.0",
+  "emitted_at": "2026-08-04T00:00:00Z",
+  "counts": {
+    "total": 1,
+    "in_scope": 1,
+    "internal": 0,
+    "with_range": 1,
+    "instances": 0,
+    "private": 0
+  },
+  "constants": [
+    {
+      "value_pp": "Fin 2 → ℤ",
+      "doc": "The numerical Grothendieck group K_num(Ku(X)) of the Kuznetsov component, as a rank-two lattice.",
+      "type_pp": "Type",
+      "scc_members": [],
+      "range": {
+        "startLine": 112,
+        "startCol": 0,
+        "endLine": 115,
+        "endCol": 24
+      },
+      "num_levels": 0,
+      "name": "Topic.Lattice.NumLattice",
+      "module": "Topic.Lattice",
+      "local_deps": [],
+      "kind": "def",
+      "is_reducible": false,
+      "is_private": false,
+      "is_internal": false,
+      "is_instance": false,
+      "cites": [
+        {
+          "key": "stmt:0123456789ab:num-lattice",
+          "relation_claimed": "specialization",
+          "frontier": [
+            "kuznetsov-component-undefined"
+          ],
+          "note": null
+        }
+      ],
+      "axioms": []
+    }
+  ],
+  "$comment_fixture": "E-09: a declaration in a closed lane's forbidden module prefix."
+}
