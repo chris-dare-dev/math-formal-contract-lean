@@ -33,19 +33,11 @@
       "depends_on": [],
       "frontier": [
         {
-          "id": "gltilde-universal-cover",
-          "kind_class": "missing-library",
-          "kind_label": "mathlib-gap",
-          "statement": "The universal cover of GL+(2,R) is not constructed in Mathlib at this revision; pi_1(S^1) = Z is absent.",
-          "discharged_by": null
-        },
-        {
           "id": "slicing-interface",
           "kind_class": "interface",
           "kind_label": "mathlib-gap",
           "statement": "The slicing interface this repo declares is claimed to model the anchor's Slicing structure.",
-          "discharged_by": null,
-          "referent": "CategoryTheory.Triangulated.Slicing"
+          "discharged_by": null
         }
       ],
       "minted_at": "2026-08-04",
@@ -76,17 +68,7 @@
       "quote_sha256": "83d4977e2a88ddae9063f4c0816222b6b8ae518b2f744f6303c1fe25286d1a0d",
       "mint_resolution": null,
       "depends_on": [],
-      "frontier": [
-        {
-          "id": "novel-structure",
-          "kind_class": "interface",
-          "kind_label": "mathlib-gap",
-          "statement": "A structure with no external analogue at this revision.",
-          "discharged_by": null,
-          "no_referent": true,
-          "referent_note": "Genuinely novel: no Mathlib or anchor constant models this, and saying so is the point of the field."
-        }
-      ],
+      "frontier": [],
       "minted_at": "2026-08-04",
       "minted_by": "Chris Dare",
       "supersedes": null,

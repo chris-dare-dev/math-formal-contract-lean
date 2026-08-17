@@ -41,6 +41,7 @@ from .join import check as join_check
 from .join import claim_table, coverage, workqueue
 from .registry import RegistryShapeError
 from .rules_registry import check as registry_check
+from .rules_registry import interface_ratio
 from .rules_registry import mint_registry_id
 from .scaffold import (
     NEXT_STEPS,
@@ -780,6 +781,17 @@ def cmd_registry_validate(args: argparse.Namespace) -> int:
     # entries is not a count of formalizable work.
     print(f"\n{path.name}: " +
           (", ".join(f"{k}: {n}" for k, n in sorted(kinds.items())) or "no entries"))
+
+    # Reported, never thresholded, and never folded into the rule table: there
+    # is no fraction of interfaces that is *wrong*, but a registry that is
+    # nine-tenths interfaces relates almost nothing to anything outside this
+    # repository, and that fact should not require reading the file to notice.
+    interfaces, frontier_total = interface_ratio(entries)
+    if frontier_total:
+        pct = 100.0 * interfaces / frontier_total
+        print(f"{path.name}: interface_ratio {interfaces}/{frontier_total} "
+              f"({pct:.0f}%) of frontier items model something outside this "
+              f"repo only by claim")
     return rc
 
 

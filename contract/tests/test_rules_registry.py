@@ -38,6 +38,8 @@ FIXTURES = {
     "asymmetric-supersede": "R-07",
     "unknown-frontier-label": "R-08",
     "obligation-without-note": "R-09",
+    "interface-without-referent": "R-10",
+    "no-referent-without-note": "R-10",
 }
 
 #: Rejected by the schema alone, with no R rule behind them. Listed separately
@@ -48,7 +50,8 @@ SCHEMA_ONLY = {"unresolved-without-reason"}
 #: The two the schema already forbids, so `mfc registry validate` rejects them
 #: before the rule runs. Kept as rules for a caller that skipped validation, and
 #: listed here so the distinction is asserted rather than assumed.
-SCHEMA_ENFORCED = {"source-arxiv-unversioned", "key-is-chunk-id-shaped"} | SCHEMA_ONLY
+SCHEMA_ENFORCED = {"source-arxiv-unversioned", "key-is-chunk-id-shaped",
+                   "interface-without-referent", "no-referent-without-note"} | SCHEMA_ONLY
 
 
 def _load(name: str) -> dict:

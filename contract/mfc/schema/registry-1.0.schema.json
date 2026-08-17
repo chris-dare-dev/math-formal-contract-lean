@@ -189,6 +189,26 @@
           "maxLength": 64,
           "$comment": "free per-topic label; the copier answer `frontier_kind_labels[]` is the allowlist mfc lint checks against"
         },
+        "referent": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "$comment": "The Mathlib or anchor constant this interface is claimed to model. REQUIRED for kind_class: interface unless no_referent is true. At near-zero Mathlib coverage a topic consists entirely of self-declared interface structures, every entry is one_way or no_claim, and statement_digest then detects drift in a private fiction while axes 1-4 and 6 all pass greenly. A named referent is the one cheap thing that makes `relation_claimed` relate to something outside the repo."
+        },
+        "no_referent": {
+          "type": "boolean",
+          "$comment": "An explicit admission that this interface models nothing external -- which is a legitimate state for genuinely novel mathematics, and must be SAID rather than left as an empty field. Requires referent_note."
+        },
+        "referent_note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "$comment": "Why nothing external is modelled. Mandatory when no_referent is true."
+        },
         "statement": {
           "type": "string",
           "minLength": 1
@@ -227,7 +247,76 @@
             }
           ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "$comment": "kind_class: interface must either NAME an external referent or say out loud that it has none. Structural rather than a lint, for the reason R-01 and R-06 record: a schema constraint beats a rule a caller can skip. R-10 is the backstop for a caller reaching check() directly.",
+          "if": {
+            "properties": {
+              "kind_class": {
+                "const": "interface"
+              }
+            },
+            "required": [
+              "kind_class"
+            ]
+          },
+          "then": {
+            "anyOf": [
+              {
+                "required": [
+                  "referent"
+                ],
+                "properties": {
+                  "referent": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "required": [
+                  "no_referent",
+                  "referent_note"
+                ],
+                "properties": {
+                  "no_referent": {
+                    "const": true
+                  },
+                  "referent_note": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "$comment": "no_referent: true is an admission, and an admission with no reason is not one. Applies at every kind_class, not only interface.",
+          "if": {
+            "properties": {
+              "no_referent": {
+                "const": true
+              }
+            },
+            "required": [
+              "no_referent"
+            ]
+          },
+          "then": {
+            "required": [
+              "referent_note"
+            ],
+            "properties": {
+              "referent_note": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
     },
     "mintResolution": {
       "type": "object",
