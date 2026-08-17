@@ -23,9 +23,9 @@ to serve this directory, the named exception in the consuming repo's
 
 | path | what |
 |---|---|
-| `mfc/schema/*.schema.json` | **all nine** artifact formats |
+| `mfc/schema/*.schema.json` | **all ten** artifact formats |
 | `mfc/digest.py` | the four canonical digest functions — **frozen** |
-| `mfc/lint.py` | the banned-property lint |
+| `mfc/lint.py` | the banned-property lint, and the volatile-property lint |
 | `mfc/validate.py` | artifact validation |
 | `mfc/bundle.py` | `declarations.json`, everything recomputed |
 | `mfc/rules.py` | the E-01..E-10 content rules |
@@ -79,6 +79,38 @@ that never fires is indistinguishable from one that is not there:
 The last one is why `additionalProperties: false` is everywhere rather than
 just tidy: it is what stops a single collapsed trust token being added to an
 artifact at all.
+
+### `run/1.0`: the artifact that exists in order not to be committed
+
+`git diff --exit-code attest/` is the only one of the four claimed sorry-gates
+that survives the seam. Two separate things were wrong with it.
+
+**It could never pass.** `bundle.json` carried `produced_at` on every
+predicate; `build.json` carried `produced_at` and `ci{run_url, workflow_sha,
+runner}`. Both are committed, both changed on every run, so the gate went red
+on no-op commits — and a gate that is red on no-op commits gets deleted within
+the week, by someone who is right that it is broken and wrong about which half
+to remove.
+
+**It could never fail either.** The generated `.gitignore` ignored
+`/attest/*.json` wholesale, so the diff compared nothing at all. Fixing only
+the first half would have produced a gate that passes for the wrong reason,
+which is indistinguishable from the bug.
+
+Both are fixed. Everything that changes per run moved to `run/1.0` —
+`attest/run.json`, gitignored, shipped as a release asset — and it names the
+files it produced by `sha256`, so provenance still joins back to the committed
+tree without anything in the committed tree moving. `contract_repo` stayed in
+the bundle: `rev` is a **pin**, and a pin that changed every run would not be
+pinning anything.
+
+`mfc lint-schemas` now fails on a `produced_at` in any of `declarations`,
+`environment`, `bundle`, `build` — the four artifacts CI regenerates on every
+commit and commits the result of. It does **not** police `review.reviewed_at`
+or `resolution.generated_at`: those are committed, but they are written by a
+deliberate human or offline act, and the date a person reviewed a statement is
+the fact being recorded rather than run metadata. Banning them would delete
+evidence to protect a gate they do not threaten.
 
 ### One judgement call worth flagging
 

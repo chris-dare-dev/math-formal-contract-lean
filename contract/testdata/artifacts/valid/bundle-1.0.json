@@ -23,7 +23,6 @@
       "file": "attest/environment.json",
       "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "produced_by": "mfc/1.0.0",
-      "produced_at": "2026-08-04T09:12:41Z",
       "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
       "self_attested": true
     },
@@ -32,7 +31,6 @@
       "file": "attest/declarations.json",
       "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "produced_by": "mfc-emit/1.0.0 + mfc/1.0.0",
-      "produced_at": "2026-08-04T09:12:41Z",
       "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
       "self_attested": true
     },
@@ -41,7 +39,6 @@
       "file": "attest/build.json",
       "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "produced_by": "lean-action + mfc/1.0.0",
-      "produced_at": "2026-08-04T09:12:41Z",
       "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
       "self_attested": true
     },
@@ -50,7 +47,6 @@
       "file": "attest/review.yaml",
       "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "produced_by": "human:Chris Dare",
-      "produced_at": "2026-08-11T00:00:00Z",
       "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
       "self_attested": false
     },
@@ -59,7 +55,6 @@
       "file": "attest/resolution.json",
       "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "produced_by": "arxmcp/statement_resolve.py@1.0.0",
-      "produced_at": "2026-08-04T08:55:10Z",
       "env_digest": null,
       "self_attested": false
     },
@@ -68,7 +63,6 @@
       "file": "attest/lean-verify-transcript.json",
       "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "produced_by": "arxmcp/lean_verify@v4.31.0",
-      "produced_at": "2026-08-04T08:59:00Z",
       "env_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "self_attested": true
     }

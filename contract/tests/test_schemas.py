@@ -56,7 +56,7 @@ def _schema(name: str) -> dict:
 
 
 def test_every_schema_is_present() -> None:
-    """Nine.
+    """Ten.
 
     `registry-1.0` joined the original seven once the accessor work showed the
     schema was fully specified in the design note and blocked on nothing — the
@@ -69,11 +69,17 @@ def test_every_schema_is_present() -> None:
     pattern, so a future `sketch` lane is a one-schema change. It is the only
     artifact `join` writes, and it may be written because it carries no verdict
     to aggregate.
+
+    `run-1.0` is the tenth, and it exists to be the one artifact that is NOT
+    committed. Every field that changes per CI run lives there — the
+    timestamp, the run URL, the runner — so that no field which changes per
+    run lives in a file `git diff --exit-code attest/` compares. See #160 and
+    `lint.VOLATILE_PROPERTY_NAMES`.
     """
     assert SCHEMAS == [
         "build-1.0", "bundle-1.0", "declarations-1.0", "emission-1.0",
         "environment-1.0", "registry-1.0", "resolution-1.0", "review-1.0",
-        "workqueue-1.0",
+        "run-1.0", "workqueue-1.0",
     ]
 
 

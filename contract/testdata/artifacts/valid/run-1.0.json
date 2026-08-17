@@ -1,0 +1,24 @@
+{
+  "schema_version": "run/1.0",
+  "produced_at": "2026-08-04T09:12:41Z",
+  "produced_by": "mfc/1.0.0",
+  "ci": {
+    "run_url": "https://github.com/chris-dare-dev/derived-alg-geo-lean/actions/runs/1",
+    "workflow_sha": "f166a3d73e2062052b249102001900b3beb929d1",
+    "runner": "ubuntu-24.04"
+  },
+  "files": [
+    {
+      "file": "attest/bundle.json",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    {
+      "file": "attest/build.json",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    {
+      "file": "attest/declarations.json",
+      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  ]
+}
