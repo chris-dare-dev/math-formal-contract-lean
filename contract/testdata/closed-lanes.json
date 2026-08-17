@@ -1,10 +1,26 @@
 {
   "$comment": "The consuming repo's closed lanes, as CLAUDE.md sections 3 and 4 describe them. Supplying this to `mfc lint` turns 'the geometric lane is closed' from a paragraph into a build failure.",
+  "permitted_module_prefixes": [
+    "Mathlib.Algebra.",
+    "Mathlib.CategoryTheory.",
+    "Mathlib.LinearAlgebra.",
+    "Mathlib.Order.",
+    "Mathlib.Topology.",
+    "Init.",
+    "Std.",
+    "Lean."
+  ],
+  "$comment_allowlist": "I-06, and the inversion of the denylist below. A denylist over Mathlib is unbounded -- a module its author never heard of is permitted by default, and every Mathlib release enlarges the set that silently passes. This bounds it: anything not named here is refused, including modules that did not exist when the list was written. The topic's own root is permitted implicitly and is deliberately not listed.",
   "closed_lanes": [
     {
       "name": "geometry",
-      "forbidden_module_prefixes": ["Mathlib.AlgebraicGeometry.", "Mathlib.CategoryTheory.Sites."],
-      "forbidden_constants": ["CategoryTheory.Sheaf"],
+      "forbidden_module_prefixes": [
+        "Mathlib.AlgebraicGeometry.",
+        "Mathlib.CategoryTheory.Sites."
+      ],
+      "forbidden_constants": [
+        "CategoryTheory.Sheaf"
+      ],
       "note": "D^b(Coh X), Serre duality, Chern characters, HRR, numerical Grothendieck groups of varieties, SODs, Fourier-Mukai. None exist in Mathlib at the pinned commit. A reachable prefix here means someone started the multi-year program by accident."
     }
   ]

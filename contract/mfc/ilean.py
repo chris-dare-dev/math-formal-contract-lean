@@ -42,9 +42,14 @@ That is solved **upstream of every rule in this package**, and not here:
 `emission-1.0.schema.json` sets `constants: minItems 1` and
 `counts.total/in_scope: minimum 1`, so an empty emission is not a representable
 artifact at all. `mfc validate` rejects it, and every subcommand validates
-before it reads. An adopter's first green build therefore requires exactly one
-declaration — which is a fair price, and a structural guarantee rather than a
-rule that could be skipped.
+before it reads.
+
+**Amended (#159).** That used to end "an adopter's first green build therefore
+requires exactly one declaration", and it made the first build *unreachable*
+instead — the generated workflow emits before anything has been written. The
+write-once `bootstrap` flag (`mfc.bootstrap`) now relaxes exactly those three
+constraints, and only while it is set, only for a genuinely empty repository,
+and never for the mis-scoped case this file exists to catch.
 
 The three states this file distinguishes are still distinguished, for a caller
 that reaches `check()` directly rather than through the CLI:
@@ -85,6 +90,19 @@ class Module(NamedTuple):
     name: str
     path: Path
     decls: frozenset[str]
+    #: What this module imports DIRECTLY, from the `.ilean`'s own
+    #: `directImports`. Direct rather than transitive is the right granularity
+    #: for an allowlist: a topic module that imports `Mathlib.Order.Basic`
+    #: transitively pulls in half of Mathlib, and judging it on that would make
+    #: every allowlist either empty or meaningless. What a module *writes at
+    #: the top of the file* is the thing its author chose.
+    #:
+    #: `None` means the `.ilean` did not record the key AT ALL, and is not the
+    #: same fact as "this module imports nothing" — `frozenset()` says that. A
+    #: reader that collapsed the two would let an allowlist report a clean
+    #: sweep over files it could not see the imports of, which is the vacuous
+    #: pass in its purest form.
+    direct_imports: frozenset[str] | None = None
 
 
 def module_components(name: str) -> tuple[str, ...]:
@@ -120,6 +138,15 @@ def load_modules(build_dir: Path) -> list[Module]:
             raise IleanError(f"{path}: unreadable .ilean: {exc}") from exc
         name = doc.get("module")
         decls = doc.get("decls")
+        # `directImports` is read leniently, and only this key is: an .ilean
+        # written before Lake recorded it is still perfectly usable for the
+        # coverage rules, which are what this reader has always been for.
+        # `I-06` reports `not_run` rather than passing when it is absent --
+        # see `allowlist()` -- so leniency here does not become a silent pass
+        # one layer up.
+        raw_imports = doc.get("directImports")
+        imports = frozenset(i for i in raw_imports if isinstance(i, str)) \
+            if isinstance(raw_imports, list) else None
         if not isinstance(name, str) or not isinstance(decls, dict):
             # An .ilean whose shape we do not recognise means Lake changed the
             # format. Guessing would silently reduce coverage to nothing.
@@ -127,7 +154,8 @@ def load_modules(build_dir: Path) -> list[Module]:
                 f"{path}: unrecognised .ilean layout (version "
                 f"{doc.get('version')!r}); expected string `module` and object "
                 f"`decls`. This build cannot check coverage against it.")
-        out.append(Module(name=name, path=path, decls=frozenset(decls)))
+        out.append(Module(name=name, path=path, decls=frozenset(decls),
+                          direct_imports=imports))
     if not out:
         raise IleanError(
             f"no *.ilean files under {build_dir}. Nothing was built, or the "
@@ -219,6 +247,86 @@ def check(emission: dict, modules: list[Module], *, lib: str | None = None
          for m in sorted(emission_modules - all_built_modules)])
 
     return results
+
+
+def allowlist(modules: list[Module], permitted_prefixes: list[str] | None, *,
+              root: str) -> RuleResult:
+    """`I-06` — every direct import of an in-scope module is on the allowlist.
+
+    ## Why an allowlist, when `E-09` already has a denylist
+
+    `closed_lanes.forbidden_module_prefixes` was presented as mechanising both
+    `CLAUDE.md` §3 and §4. It mechanises §4 — *importing* geometry — and it
+    does that with a **denylist over Mathlib**, which is unbounded: a Mathlib
+    module the denylist author never heard of is permitted by default. Every
+    new Mathlib release enlarges the set of things that silently pass.
+
+    Inverting it bounds the problem. A topic repo knows what it is allowed to
+    build on; everything else is refused by default, including modules that did
+    not exist when the list was written. That is the whole argument, and it is
+    the same one behind `additionalProperties: false` on every schema here.
+
+    ## What is permitted implicitly
+
+    A module's imports of its OWN library are always allowed. Requiring every
+    topic to list its own root would make the common case noisy and the
+    interesting case — a reach into someone else's tree — harder to see.
+
+    ## Direct, not transitive
+
+    Judged on `directImports`: what the file writes at the top. Transitively,
+    almost anything reaches almost all of Mathlib, so a transitive allowlist is
+    either empty or meaningless. What a module chose to import is the thing its
+    author is answerable for.
+
+    ## It reports `not_run` in two distinct situations, and never `pass`
+
+    No configuration, or an `.ilean` that does not record `directImports` at
+    all. In both, nothing was checked — and `Module.direct_imports is None`
+    exists precisely so the second is distinguishable from a module that
+    genuinely imports nothing.
+    """
+    title = "every direct import is on the allowlist"
+    if permitted_prefixes is None:
+        return RuleResult("I-06", title, Status.NOT_RUN,
+                          reason="no permitted_module_prefixes configuration "
+                                 "supplied (--closed-lanes)")
+    in_scope = [m for m in modules if root and is_under(m.name, root)]
+    blind = [m for m in in_scope if m.direct_imports is None]
+    if blind:
+        return RuleResult(
+            "I-06", title, Status.NOT_RUN,
+            reason=f"{len(blind)} of {len(in_scope)} in-scope .ilean file(s) do "
+                   f"not record directImports (e.g. {blind[0].name}); the "
+                   f"imports could not be read, which is not the same as their "
+                   f"being permitted")
+
+    # `"Mathlib.Algebra."` is the spelling `forbidden_module_prefixes` already
+    # uses, and one config should not have two conventions. The trailing dot is
+    # stripped here rather than required or forbidden: component-wise matching
+    # splits on ".", so a trailing dot would produce an empty final component
+    # that matches nothing, and every prefix in the existing style would
+    # silently refuse everything. Stripping keeps the spelling AND the
+    # component-wise semantics -- `Mathlib.Algebra` still does not match
+    # `Mathlib.AlgebraOfSomething`, which is the whole point of not using
+    # `str.startswith`.
+    prefixes = [p.rstrip(".") for p in permitted_prefixes]
+
+    findings: list[Finding] = []
+    for module in sorted(in_scope):
+        for imported in sorted(module.direct_imports or ()):
+            if is_under(imported, root):
+                continue
+            if any(is_under(imported, prefix) for prefix in prefixes):
+                continue
+            findings.append(Finding(
+                "I-06", module.name,
+                f"imports {imported!r}, which is on no permitted prefix"))
+    return RuleResult("I-06", title,
+                      Status.FAIL if findings else Status.PASS, tuple(findings),
+                      reason="" if findings else
+                             f"{len(in_scope)} in-scope module(s) against "
+                             f"{len(permitted_prefixes)} permitted prefix(es)")
 
 
 class Coverage(NamedTuple):
