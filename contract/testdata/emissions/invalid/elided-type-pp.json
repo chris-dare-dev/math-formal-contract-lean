@@ -31,7 +31,8 @@
   "constants": [
     {
       "value_pp": "0",
-      "type_pp": "forall (C : Type u) [inst : Cat C], ⋯",
+      "doc": null,
+      "type_pp": "forall (C : Type u) [inst : Cat C], \u22ef",
       "scc_members": [],
       "range": {
         "startLine": 112,
@@ -60,6 +61,7 @@
     },
     {
       "value_pp": null,
+      "doc": null,
       "type_pp": "True",
       "scc_members": [],
       "range": {
