@@ -117,3 +117,104 @@ def _walk(node: Any, path: str) -> Iterator[Finding]:
 def lint_schema(document: Any) -> list[Finding]:
     """Every banned property name declared anywhere in `document`."""
     return list(_walk(document, ""))
+
+
+# ---------------------------------------------------------------------------
+# The volatile-property lint — #160.
+# ---------------------------------------------------------------------------
+#
+# `git diff --exit-code attest/` is one of four claimed sorry-gates and the
+# only one that survives the seam. It asserts that the committed attestations
+# are byte-identical to the ones this run produced, which is what makes them
+# evidence rather than decoration.
+#
+# A `produced_at` inside a committed artifact makes that gate red on every
+# no-op commit, and a gate that is red on no-op commits is deleted within the
+# week — by someone who is right that it is broken and wrong about which half
+# to remove. So the field is not zeroed, and it is not tolerated: it moves to
+# `run/1.0`, which is not committed.
+#
+# This lint is what stops it coming back.
+
+#: Property names that change on a run CI performs automatically, and so may
+#: not appear in an artifact CI both regenerates and commits.
+VOLATILE_PROPERTY_NAMES = frozenset({
+    "produced_at", "emitted_at", "generated_at", "built_at",
+    "timestamp", "started_at", "finished_at",
+    "run_url", "run_id", "job_id", "runner",
+})
+
+#: The artifacts CI regenerates on EVERY commit and commits the result of.
+#: This is the whole of the rule, and the reason it is a set of four rather
+#: than "every schema":
+#:
+#: * `emission` is regenerated every run but is NOT committed, so its
+#:   `emitted_at` costs nothing;
+#: * `run` is where the volatile fields were moved TO;
+#: * `review` carries `reviewed_at` and `resolution` carries `generated_at`.
+#:   Both are committed — and both are produced by a deliberate human or
+#:   offline act, not by CI on every commit. Their timestamps are *content*:
+#:   the date a person reviewed something is the fact being recorded. Banning
+#:   them would delete evidence to protect a gate they do not threaten.
+CI_REGENERATED_ARTIFACTS = frozenset({
+    "declarations", "environment", "bundle", "build",
+})
+
+
+def artifact_name(schema_filename: str) -> str:
+    """`bundle-1.0.schema.json` -> `bundle`. `''` when the name says nothing."""
+    stem = schema_filename.split(".", 1)[0]
+    return stem.rsplit("-", 1)[0] if "-" in stem else ""
+
+
+def lint_volatile(document: Any, schema_filename: str) -> list[Finding]:
+    """Volatile property names declared by a committed, CI-regenerated artifact.
+
+    Keyed on the schema's filename because that is what names the artifact.
+    A schema whose filename does not identify one of `CI_REGENERATED_ARTIFACTS`
+    is not judged here at all — this lint has one job and does not creep into
+    being an opinion about timestamps in general.
+    """
+    if artifact_name(schema_filename) not in CI_REGENERATED_ARTIFACTS:
+        return []
+    return [f for f in _walk_names(document, "", VOLATILE_PROPERTY_NAMES)]
+
+
+def _walk_names(node: Any, path: str, names: frozenset[str]) -> Iterator[Finding]:
+    """`_walk`, over an arbitrary name set.
+
+    `_walk` is left keyed to `FORBIDDEN_PROPERTY_NAMES` rather than
+    parameterised, because that lint is quoted by name in two repos' rules and
+    its signature is part of what they quote.
+    """
+    if isinstance(node, list):
+        for i, item in enumerate(node):
+            yield from _walk_names(item, f"{path}[{i}]", names)
+        return
+    if not isinstance(node, dict):
+        return
+
+    for keyword in _PROPERTY_MAPS:
+        block = node.get(keyword)
+        if isinstance(block, dict):
+            for name, subschema in block.items():
+                if name in names:
+                    yield Finding(f"{path}{keyword}.{name}", name)
+                yield from _walk_names(subschema, f"{path}{keyword}.{name}.", names)
+
+    for keyword in _SCHEMA_MAPS:
+        block = node.get(keyword)
+        if isinstance(block, dict):
+            for name, subschema in block.items():
+                yield from _walk_names(subschema, f"{path}{keyword}.{name}.", names)
+
+    for keyword in _SCHEMA_LISTS:
+        block = node.get(keyword)
+        if isinstance(block, list):
+            for i, subschema in enumerate(block):
+                yield from _walk_names(subschema, f"{path}{keyword}[{i}].", names)
+
+    for keyword in _SCHEMA_VALUES:
+        subschema = node.get(keyword)
+        if isinstance(subschema, (dict, list)):
+            yield from _walk_names(subschema, f"{path}{keyword}.", names)

@@ -401,7 +401,7 @@ def test_cli_reports_unrecognized_predicates_as_unchecked(
     _edit(tree, lambda b: b["unrecognized_predicates"].append({
         "predicateType": "https://example.invalid/predicate/future/v1",
         "file": "attest/future.json", "sha256": "0" * 64,
-        "produced_by": "someone/1.0", "produced_at": "2026-08-04T00:00:00Z",
+        "produced_by": "someone/1.0",
         "env_digest": None, "self_attested": False}))
     main(["conformance", "--bundle", str(tree)])
     err = capsys.readouterr().err

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schema/bundle-9.9.schema.json",
+  "title": "REJECTION FIXTURE - a committed artifact that grew a timestamp back",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "bundle/9.9"
+    },
+    "produced_at": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "predicate": {
+      "type": "object",
+      "properties": {
+        "run_url": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

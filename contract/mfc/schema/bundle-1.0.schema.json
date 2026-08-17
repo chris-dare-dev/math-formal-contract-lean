@@ -109,7 +109,6 @@
         "file",
         "sha256",
         "produced_by",
-        "produced_at",
         "env_digest",
         "self_attested"
       ],
@@ -129,9 +128,6 @@
         "produced_by": {
           "type": "string"
         },
-        "produced_at": {
-          "type": "string"
-        },
         "env_digest": {
           "type": [
             "string",
@@ -143,7 +139,8 @@
           "type": "boolean",
           "$comment": "REQUIRED. Honest labelling for a solo-operated repo: true means the party that wrote the code also produced this measurement."
         }
-      }
+      },
+      "$comment": "No produced_at. The predicate says WHAT was produced and by which tool version -- both stable across runs of an unchanged environment. WHEN is one field in run/1.0, recorded once for the whole run rather than repeated per predicate. contract_repo stays: `rev` is a pin, and a pin that changed every run would not be pinning anything."
     }
   },
   "$comment": "SLSA's VerificationSummaryAttestation is DELIBERATELY NOT USED. Its verificationResult: PASSED|FAILED is exactly the single collapsed trust token arXMCP CLAUDE.md 4.9 forbids. One subject, N independently-dated, independently-sourced predicates, no aggregate."

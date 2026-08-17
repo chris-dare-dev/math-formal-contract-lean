@@ -50,7 +50,12 @@ from .scaffold import (
     render,
     write,
 )
-from .lint import FORBIDDEN_PROPERTY_NAMES, lint_schema
+from .lint import (
+    FORBIDDEN_PROPERTY_NAMES,
+    VOLATILE_PROPERTY_NAMES,
+    lint_schema,
+    lint_volatile,
+)
 from .rules import Status, check, summarize
 from .validate import (
     LoadError,
@@ -93,6 +98,7 @@ def cmd_lint_schemas(args: argparse.Namespace) -> int:
         return EXIT_USAGE
 
     findings = 0
+    volatile = 0
     unreadable = 0
     for path in paths:
         document, problem = _load(path)
@@ -103,6 +109,10 @@ def cmd_lint_schemas(args: argparse.Namespace) -> int:
         for finding in lint_schema(document):
             print(f"{path.name}: {finding}", file=sys.stderr)
             findings += 1
+        for finding in lint_volatile(document, path.name):
+            print(f"{path.name}: {finding.path}: declares {finding.name!r}, which "
+                  f"changes every run", file=sys.stderr)
+            volatile += 1
 
     if unreadable:
         return EXIT_USAGE
@@ -114,9 +124,19 @@ def cmd_lint_schemas(args: argparse.Namespace) -> int:
             f"{sorted(FORBIDDEN_PROPERTY_NAMES)}.",
             file=sys.stderr,
         )
+    if volatile:
+        print(
+            f"error: {volatile} volatile property name(s) in an artifact CI both "
+            f"regenerates and commits. `git diff --exit-code attest/` would then "
+            f"be red on every no-op commit, and a gate that is red on no-op "
+            f"commits gets deleted. Move the field to run/1.0, which is not "
+            f"committed; the volatile set is {sorted(VOLATILE_PROPERTY_NAMES)}.",
+            file=sys.stderr,
+        )
+    if findings or volatile:
         return EXIT_FINDINGS
 
-    print(f"ok: {len(paths)} schema(s), no forbidden property names")
+    print(f"ok: {len(paths)} schema(s), no forbidden or volatile property names")
     return EXIT_OK
 
 

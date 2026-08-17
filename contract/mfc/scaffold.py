@@ -134,9 +134,27 @@ LEAN_TOOLCHAIN = "@@TOOLCHAIN@@\n"
 
 GITIGNORE = """\
 /.lake/
-/attest/*.json
-!/attest/.gitkeep
 __pycache__/
+
+# attest/ is NOT ignored wholesale, and the difference is the gate.
+#
+# `git diff --exit-code attest/` in the workflow asserts that the committed
+# attestations are byte-identical to the ones this run produced. Ignoring
+# `/attest/*.json` -- which this file used to do -- made that assertion compare
+# nothing: it could not fail, so it was not a gate, it was a green step.
+#
+# Two files are ignored, each for a stated reason:
+#
+#   * lean-emission.json is the emitter's raw output. It carries `emitted_at`
+#     and is an INPUT to the bundle rather than an attestation; the committed
+#     declarations.json is what it is evidence for.
+#   * run.json is run/1.0 -- the timestamp, the CI run URL, the runner. Every
+#     field that changes per run lives there precisely so that nothing which
+#     changes per run lives in a committed file. It ships as a release asset.
+#
+# Everything else under attest/ is committed and must be reproducible.
+/attest/lean-emission.json
+/attest/run.json
 """
 
 LAKEFILE = '''\
@@ -405,8 +423,18 @@ jobs:
       - name: coverage
         run: mfc check-ilean-coverage --emission attest/lean-emission.json
 
+      # This is the only sorry-gate that survives the seam, and it works only
+      # because nothing under attest/ that is committed changes per run: the
+      # timestamp and the CI identity live in attest/run.json, which is
+      # gitignored (run/1.0). If you add a field that moves every run to a
+      # committed artifact, this step reddens on no-op commits -- fix the
+      # field, not this line. `mfc lint-schemas` fails on exactly that mistake.
+      #
+      # `--stat` on failure, because the default output of a diff over
+      # generated JSON is unreadable and an unreadable gate gets skipped.
       - name: no hand-edited attestations
-        run: git diff --exit-code attest/
+        run: git diff --exit-code --stat attest/ || {
+          echo "::error::attest/ differs from what this run produced"; exit 1; }
 """
 
 
