@@ -36,6 +36,25 @@ from .registry import entries as registry_entries
 #: elided ones).
 ELISION_MARKERS = ("⋯", "…", "...")
 
+#: Every rule, in order, with the title it reports under. Used by the bootstrap
+#: path, which must report the same ten rules as an ordinary run rather than a
+#: shorter list -- a rule missing from the table reads as a rule that does not
+#: exist, where `not_run` reads as one that exists and did not fire.
+#: `test_rules.py` asserts this table against an ordinary run, so the two
+#: cannot drift.
+RULE_TITLES: tuple[tuple[str, str], ...] = (
+    ("E-01", "no declaration depends on sorryAx"),
+    ("E-02", "every locally declared axiom is declared in axiom_policy"),
+    ("E-03", "every axiom closure is within the declared policy"),
+    ("E-04", "every cites[].key exists in the registry"),
+    ("E-05", "relation_claimed=exact implies an empty frontier"),
+    ("E-06", "relation_claimed=no_claim carries a note"),
+    ("E-07", "no type_pp or value_pp is elided"),
+    ("E-08", "the emission is not vacuous"),
+    ("E-09", "no declaration reaches into a closed lane"),
+    ("E-10", "axioms and local_deps are sorted ascending"),
+)
+
 
 class Status(str, Enum):
     PASS = "pass"
@@ -81,9 +100,26 @@ def check(
     *,
     registry: dict | None = None,
     closed_lanes: list[dict] | None = None,
+    bootstrap: bool = False,
 ) -> list[RuleResult]:
-    """Run every rule. Order is E-01..E-10 so output is comparable run to run."""
+    """Run every rule. Order is E-01..E-10 so output is comparable run to run.
+
+    `bootstrap` is the one state in which an emission may be empty (see
+    `mfc.bootstrap`). It reports every rule `not_run` rather than `pass`: an
+    empty emission satisfies E-01..E-10 vacuously, and a green table over it
+    would say "no declaration depends on sorryAx" about a repository that has
+    no declarations at all. It also reports every rule rather than a subset,
+    so the table's shape does not change between a bootstrapping repository
+    and a working one.
+    """
     constants = emission["constants"]
+    if bootstrap and not constants:
+        return [
+            RuleResult(rule, title, Status.NOT_RUN,
+                       reason="bootstrap: the emission is empty, so this rule "
+                              "has nothing to check -- it did not pass")
+            for rule, title in RULE_TITLES
+        ]
     policy = _policy(environment)
     additions = _declared_additions(environment)
     results: list[RuleResult] = []
