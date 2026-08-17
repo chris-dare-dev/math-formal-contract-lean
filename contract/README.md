@@ -44,6 +44,7 @@ to serve this directory, the named exception in the consuming repo's
 | `testdata/emissions/bootstrap/` | the emission a repository has *before* it has any mathematics |
 | `testdata/artifacts/invalid/` | artifacts that must fail a cross-field rule |
 | `testdata/registries/invalid/` | registries that must fail an `R` rule |
+| `testdata/digests/` | the canonical **bytes** behind nine digests, hand-written and hashed with `shasum` |
 | `tests/` | pytest |
 
 ### How much of each schema was given, and how much was authored
@@ -113,6 +114,30 @@ or `resolution.generated_at`: those are committed, but they are written by a
 deliberate human or offline act, and the date a person reviewed a statement is
 the fact being recorded rather than run metadata. Banning them would delete
 evidence to protect a gate they do not threaten.
+
+### Canonicalization is pinned by data, because there is only one implementation
+
+JSON-Schema-Test-Suite works because ~20 independent implementations run the
+corpus. Here there is one, so "our code agrees with our code" proves nothing: a
+canonicalization bug is symmetric and invisible to conformance.
+
+`testdata/digests/canonicalization.json` carries, for each of the nine cases,
+the **exact bytes** fed to `sha256` — written by hand from the spec in
+`digest.py` and hashed with `shasum(1)` — beside the digest of those bytes.
+The tests then assert the datum is internally consistent using stdlib `hashlib`
+alone, that `mfc` reproduces those bytes **byte for byte**, and that the
+end-to-end digest matches. Under drift the first still passes and the second
+fails, naming the bytes that moved.
+
+Three of the nine reproduce values the design note recorded as `[COMPUTED]`
+against the real repository at `f166a3d`, months before this code existed —
+hand-written canonical forms whose `shasum` matched numbers nobody could have
+back-fitted. A fourth test set mutates the canonicalizer three plausible ways
+(unsorted keys, default separators, `ensure_ascii=False`) and asserts each is
+rejected, because assertions that cannot fail are the thing being fixed.
+
+The rule for adding a case is in `testdata/digests/README.md` and is one line:
+never paste `mfc`'s own output.
 
 ### One judgement call worth flagging
 

@@ -1,0 +1,142 @@
+{
+  "cases": [
+    {
+      "id": "d1-plain",
+      "function": "quote_sha256",
+      "canonical_encoding": "utf8-text",
+      "why": "The base case. Non-ASCII stays RAW here -- quote_sha256 hashes normalized text, not canonical JSON, so no \\uXXXX escaping happens.",
+      "input": {
+        "quote": "Let X be a smooth projective variety over ℂ."
+      },
+      "canonical": "Let X be a smooth projective variety over ℂ.",
+      "sha256": "5e936abf156a914734d02c078e5334a35b8737ca178aced0a6c6098640c92a3d"
+    },
+    {
+      "id": "d1-rewrapped",
+      "function": "quote_sha256",
+      "canonical_encoding": "utf8-text",
+      "why": "Same canonical form, different input. A re-render (ar5iv to MinerU, a LaTeXML upgrade) that changes only wrapping must not rotate a citation.",
+      "input": {
+        "quote": "Let  X be\na smooth\tprojective   variety over ℂ.\n"
+      },
+      "canonical": "Let X be a smooth projective variety over ℂ.",
+      "sha256": "5e936abf156a914734d02c078e5334a35b8737ca178aced0a6c6098640c92a3d"
+    },
+    {
+      "id": "d1-decomposed",
+      "function": "quote_sha256",
+      "canonical_encoding": "utf8-text",
+      "why": "NFC runs BEFORE whitespace collapse. The input is e + U+0301; the canonical form is precomposed U+00E9. Reversing the order would make the result depend on the input's composition.",
+      "input": {
+        "quote": "Café  X"
+      },
+      "canonical": "Café X",
+      "sha256": "6243132be1ea26f3c040874be2b44c329bd5ed89cc649a88cc45ad5060f9ef29"
+    },
+    {
+      "id": "d2-two-packages",
+      "function": "env_digest",
+      "canonical_encoding": "canonical-json",
+      "why": "The small readable case: sorted keys, no spaces after separators, packages as [name, rev] pairs sorted as tuples.",
+      "input": {
+        "lean_toolchain": "leanprover/lean4:v4.29.0",
+        "lean_githash": "98dc76e3c0a9b856c9b98726b713fb04fab16740",
+        "lean_options": {
+          "autoImplicit": false
+        },
+        "packages": [
+          [
+            "mathlib",
+            "8a178386ffc0f5fef0b77738bb5449d50efeea95"
+          ],
+          [
+            "batteries",
+            "756e3321fd3b02a85ffda19fef789916223e578c"
+          ]
+        ]
+      },
+      "canonical": "{\"lean_githash\":\"98dc76e3c0a9b856c9b98726b713fb04fab16740\",\"lean_options\":{\"autoImplicit\":false},\"lean_toolchain\":\"leanprover/lean4:v4.29.0\",\"packages\":[[\"batteries\",\"756e3321fd3b02a85ffda19fef789916223e578c\"],[\"mathlib\",\"8a178386ffc0f5fef0b77738bb5449d50efeea95\"]]}",
+      "sha256": "828aa74c36615a3ce8116c3252b950729be1d80130ef8d221d5758179bc5fb9f"
+    },
+    {
+      "id": "d2-design-note",
+      "function": "env_digest",
+      "canonical_encoding": "canonical-json",
+      "why": "The value the design note recorded as [COMPUTED] against the real repository at f166a3d, and the env_digest carried by testdata/artifacts/valid/environment-1.0.json. Package sort is by ASCII, so every capitalized name precedes every lowercase one.",
+      "input": {
+        "lean_toolchain": "leanprover/lean4:v4.29.0",
+        "lean_githash": "98dc76e3c0a9b856c9b98726b713fb04fab16740",
+        "lean_options": {
+          "autoImplicit": false,
+          "relaxedAutoImplicit": false
+        },
+        "packages": "@environment-1.0.json"
+      },
+      "canonical": "{\"lean_githash\":\"98dc76e3c0a9b856c9b98726b713fb04fab16740\",\"lean_options\":{\"autoImplicit\":false,\"relaxedAutoImplicit\":false},\"lean_toolchain\":\"leanprover/lean4:v4.29.0\",\"packages\":[[\"BridgelandStability\",\"9e48f23a382ba117b63076a33e0e775389fef1ba\"],[\"Cli\",\"7802da01beb530bf051ab657443f9cd9bc3e1a29\"],[\"LeanSearchClient\",\"c5d5b8fe6e5158def25cd28eb94e4141ad97c843\"],[\"MD4Lean\",\"6a3fb240133bcb7e1a066fdc784b3fdc304e3fc5\"],[\"Qq\",\"707efb56d0696634e9e965523a1bbe9ac6ce141d\"],[\"aesop\",\"7152850e7b216a0d409701617721b6e469d34bf6\"],[\"batteries\",\"756e3321fd3b02a85ffda19fef789916223e578c\"],[\"importGraph\",\"48d5698bc464786347c1b0d859b18f938420f060\"],[\"informal\",\"be2042471694a77eea68089c770de3c9a9245d7c\"],[\"mathlib\",\"8a178386ffc0f5fef0b77738bb5449d50efeea95\"],[\"plausible\",\"83e90935a17ca19ebe4b7893c7f7066e266f50d3\"],[\"proofwidgets\",\"3c52dee17f0cd89c1ec14de78920d1bdaa3d26b3\"],[\"subverso\",\"ce893b9042128037e2d3c0158b9567fab9fae268\"],[\"verso\",\"7ae82ac2ae54ae5dcc9948a701669e9b596e5cae\"]]}",
+      "sha256": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349"
+    },
+    {
+      "id": "d3-leaf",
+      "function": "statement_digest",
+      "canonical_encoding": "canonical-json",
+      "why": "A def's body IS its statement. Note the \\u2192 and \\u2124 escapes: ensure_ascii=True, so the canonical bytes are pure ASCII even though the pretty-printed type is not.",
+      "input": {
+        "name": "BridgelandStabLean.Lattice.NumLattice",
+        "kind": "def",
+        "type_pp": "Type",
+        "value_pp": "Fin 2 → ℤ",
+        "dep_digests": {}
+      },
+      "canonical": "{\"deps\":{},\"kind\":\"def\",\"pp\":\"Type\",\"v\":\"statement-digest/1\",\"value_pp\":\"Fin 2 \\u2192 \\u2124\"}",
+      "sha256": "c44dc5545999699041be0421a8767f82c45ae16d38a736db3dbf532a3d6a1acf"
+    },
+    {
+      "id": "d3-merkle",
+      "function": "statement_digest",
+      "canonical_encoding": "canonical-json",
+      "why": "The dependent hashes its dependency's DIGEST, not its name -- which is what makes restating a dependency reach every dependent. value_pp is null because a theorem's body is a proof.",
+      "input": {
+        "name": "BridgelandStabLean.Lattice.finrank_numLattice",
+        "kind": "theorem",
+        "type_pp": "Module.finrank ℤ BridgelandStabLean.Lattice.NumLattice = 2",
+        "value_pp": null,
+        "dep_digests": {
+          "BridgelandStabLean.Lattice.NumLattice": "c44dc5545999699041be0421a8767f82c45ae16d38a736db3dbf532a3d6a1acf"
+        }
+      },
+      "canonical": "{\"deps\":{\"BridgelandStabLean.Lattice.NumLattice\":\"c44dc5545999699041be0421a8767f82c45ae16d38a736db3dbf532a3d6a1acf\"},\"kind\":\"theorem\",\"pp\":\"Module.finrank \\u2124 BridgelandStabLean.Lattice.NumLattice = 2\",\"v\":\"statement-digest/1\",\"value_pp\":null}",
+      "sha256": "bee014f3f5e761cfe1e329560ab0c5f26ebf3c6c24be8c85bcfed64b7cf72af2"
+    },
+    {
+      "id": "d3-scc-placeholder",
+      "function": "statement_digest",
+      "canonical_encoding": "canonical-json",
+      "why": "An in-SCC dependency contributes its NAME under __scc__ rather than a digest, because members of one mutual block cannot each hash the other. This pins the placeholder's shape as data.",
+      "input": {
+        "name": "T",
+        "kind": "theorem",
+        "type_pp": "P",
+        "value_pp": null,
+        "dep_digests": {
+          "Foo": {
+            "__scc__": "Foo"
+          }
+        }
+      },
+      "canonical": "{\"deps\":{\"Foo\":{\"__scc__\":\"Foo\"}},\"kind\":\"theorem\",\"pp\":\"P\",\"v\":\"statement-digest/1\",\"value_pp\":null}",
+      "sha256": "d45c149d566c35e415ac0c35efef3609826b7e6e4f34d8db79898b925dc0855d"
+    },
+    {
+      "id": "d4-file-bytes",
+      "function": "file_digest",
+      "canonical_encoding": "raw-bytes",
+      "why": "D4 is the raw sha256 of file BYTES with no canonicalization at all -- bundle.json commits to what is on disk, and `git diff --exit-code attest/` is what keeps the two honest. Canonicalizing here would let the committed bytes drift from the attested ones. The fixture is 120 bytes and ends with a newline; reformatting it rotates this value, which is the property being pinned.",
+      "input": {
+        "path": "digests/bytes/d4-fixture.txt"
+      },
+      "canonical": null,
+      "byte_length": 120,
+      "sha256": "275fad5b615c5f8df0d5c17727e288498192c149d1e7c406a6ce47bbef76e91b"
+    }
+  ]
+}

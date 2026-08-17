@@ -1,0 +1,2 @@
+attest/bundle.json commits to the exact BYTES on disk.
+D4 is not canonicalized, so this file must never be reformatted.
