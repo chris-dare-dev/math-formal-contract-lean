@@ -31,6 +31,7 @@
   "constants": [
     {
       "value_pp": "0",
+      "doc": null,
       "type_pp": "Nat",
       "scc_members": [],
       "range": {
@@ -63,6 +64,7 @@
     },
     {
       "value_pp": null,
+      "doc": null,
       "type_pp": "True",
       "scc_members": [],
       "range": {
