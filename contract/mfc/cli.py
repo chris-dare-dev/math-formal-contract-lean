@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import bootstrap as bootstrap_flag
 from .bundle import BundleError, build_declarations, dumps
 from .conformance import check as conformance_check
 from .conformance import evidence_table, gather
@@ -119,6 +120,24 @@ def cmd_lint_schemas(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _bootstrap_state(args: argparse.Namespace) -> tuple[Any, int | None]:
+    """Read the bootstrap flag, or explain why the answer is unavailable.
+
+    A record that cannot be read is EXIT_USAGE, never a silent "off". The flag
+    decides whether an empty emission validates, so guessing at it would be
+    guessing at the vacuous-pass guard.
+    """
+    record = getattr(args, "record", None)
+    try:
+        return bootstrap_flag.read(Path(record) if record else None), None
+    except bootstrap_flag.RecordError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return None, EXIT_USAGE
+    except (LoadError, OSError) as exc:
+        print(f"error: {record or bootstrap_flag.DEFAULT_RECORD}: {exc}", file=sys.stderr)
+        return None, EXIT_USAGE
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     path = Path(args.artifact)
     if not path.is_file():
@@ -173,6 +192,18 @@ def cmd_validate(args: argparse.Namespace) -> int:
         print(f"error: {schema_path.name}: {problem}", file=sys.stderr)
         return EXIT_USAGE
 
+    if (declared == "emission/1.0" and isinstance(document, dict)
+            and bootstrap_flag.is_empty(document)):
+        state, rc = _bootstrap_state(args)
+        if rc is not None:
+            return rc
+        if state.active:
+            schema_doc = bootstrap_flag.relax(schema_doc)
+            print(f"note: {state.path.name} sets bootstrap: true, so an empty "
+                  f"emission is accepted here. Nothing about this repository has "
+                  f"been checked -- run `mfc lint` for the rule table, where every "
+                  f"rule reports not_run.", file=sys.stderr)
+
     try:
         problems = validate_artifact(document, schema_doc)
     except LoadError as exc:
@@ -193,7 +224,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _validate_against(document: object, version: str, label: str) -> int | None:
+def _validate_against(document: object, version: str, label: str,
+                      *, bootstrap: bool = False) -> int | None:
     """Validate `document` against the schema `version` names. None if clean."""
     try:
         schema_path = schema_path_for(version)
@@ -207,6 +239,8 @@ def _validate_against(document: object, version: str, label: str) -> int | None:
     if problem is not None:
         print(f"error: {schema_path.name}: {problem}", file=sys.stderr)
         return EXIT_USAGE
+    if bootstrap:
+        schema_doc = bootstrap_flag.relax(schema_doc)
     try:
         problems = validate_artifact(document, schema_doc)
     except LoadError as exc:
@@ -235,6 +269,16 @@ def cmd_bundle(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
+    state, rc = _bootstrap_state(args)
+    if rc is not None:
+        return rc
+    # Bundling an empty emission is not vacuous the way linting one is: the
+    # output honestly reports zero declarations, and `declarations/1.0` already
+    # permits that (its counts carry `minimum: 0`). Only the emission's own
+    # vacuity constraints are relaxed, and only while the flag is set.
+    bootstrap_active = (state.active and isinstance(emission, dict)
+                        and bootstrap_flag.is_empty(emission))
+
     # Validate the INPUTS before deriving anything from them. Recomputing over
     # a malformed emission would produce a well-formed declarations.json built
     # on nonsense, which is worse than failing.
@@ -245,7 +289,8 @@ def cmd_bundle(args: argparse.Namespace) -> int:
                   f"{doc.get('schema_version') if isinstance(doc, dict) else type(doc).__name__!r}",
                   file=sys.stderr)
             return EXIT_USAGE
-        rc = _validate_against(doc, want, label)
+        rc = _validate_against(doc, want, label,
+                               bootstrap=bootstrap_active and want == "emission/1.0")
         if rc is not None:
             return rc
 
@@ -294,14 +339,43 @@ def cmd_lint(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
+    state, rc = _bootstrap_state(args)
+    if rc is not None:
+        return rc
+
+    # The flag burns down here, and only here. `mfc lint` is the one command
+    # that reads a whole emission and judges it, so it is the one place that
+    # can see the transition from "no declarations yet" to "declarations", and
+    # it records that transition rather than letting the flag outlive the
+    # condition it describes. The rewritten record is left in the working tree
+    # uncommitted, which is exactly what CI's `git diff --exit-code` reports:
+    # clearing the flag is a commit an operator makes, not a fact CI invents.
+    empty = isinstance(emission, dict) and bootstrap_flag.is_empty(emission)
+    started = isinstance(emission, dict) and bootstrap_flag.has_declarations(emission)
+    if state.active and started:
+        try:
+            at = bootstrap_flag.clear(state.path)
+        except (bootstrap_flag.RecordError, OSError) as exc:
+            print(f"error: {state.path}: bootstrap must be cleared now that this "
+                  f"repository has declarations, and it could not be: {exc}",
+                  file=sys.stderr)
+            return EXIT_USAGE
+        print(f"note: {state.path.name}: this repository now has declarations, so "
+              f"bootstrap was cleared and dated {at}. Commit that change -- the "
+              f"flag is write-once and may never be set again.", file=sys.stderr)
+        state = state._replace(active=False, cleared_at=at)
+
+    bootstrap_active = state.active and empty
     for doc, want, label in ((emission, "emission/1.0", emission_path.name),
                              (environment, "environment/1.0", env_path.name)):
-        rc = _validate_against(doc, want, label)
+        rc = _validate_against(doc, want, label,
+                               bootstrap=bootstrap_active and want == "emission/1.0")
         if rc is not None:
             return rc
 
     closed_lanes = lanes_doc.get("closed_lanes") if isinstance(lanes_doc, dict) else None
-    results = check(emission, environment, registry=registry, closed_lanes=closed_lanes)
+    results = check(emission, environment, registry=registry,
+                    closed_lanes=closed_lanes, bootstrap=bootstrap_active)
     return _report(results, args.require_all)
 
 
@@ -716,6 +790,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="override the schema path (debugging only -- the schema is "
              "normally inferred from the artifact's own schema_version)",
     )
+    val.add_argument(
+        "--record",
+        help=f"path to formalization.yaml, read only for the bootstrap flag "
+             f"(default: {bootstrap_flag.DEFAULT_RECORD})",
+    )
     val.set_defaults(func=cmd_validate)
 
     bun = sub.add_parser(
@@ -727,6 +806,11 @@ def build_parser() -> argparse.ArgumentParser:
     bun.add_argument("--emission", required=True, help="path to lean-emission.json")
     bun.add_argument("--environment", required=True, help="path to environment.json")
     bun.add_argument("--out", required=True, help="where to write declarations.json")
+    bun.add_argument(
+        "--record",
+        help=f"path to formalization.yaml, read only for the bootstrap flag "
+             f"(default: {bootstrap_flag.DEFAULT_RECORD})",
+    )
     bun.set_defaults(func=cmd_bundle)
 
     lnt = sub.add_parser(
@@ -743,6 +827,12 @@ def build_parser() -> argparse.ArgumentParser:
                      help="JSON with a closed_lanes[] array; enables E-09")
     lnt.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
+    lnt.add_argument(
+        "--record",
+        help=f"path to formalization.yaml; carries the bootstrap flag, which "
+             f"this command clears once the emission is non-empty "
+             f"(default: {bootstrap_flag.DEFAULT_RECORD})",
+    )
     lnt.set_defaults(func=cmd_lint)
 
     con = sub.add_parser(

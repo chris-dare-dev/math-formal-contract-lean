@@ -1,0 +1,32 @@
+{
+  "schema_version": "emission/1.0",
+  "root_lib": "MathFormalContractTest",
+  "pp_options": {
+    "pp.universes": true,
+    "pp.proofs": true,
+    "pp.notation": true,
+    "pp.fullNames": true,
+    "pp.explicit": false,
+    "format.width": 120
+  },
+  "modules": [
+    "MathFormalContractTest"
+  ],
+  "lean_version": "4.29.0",
+  "lean_options": {
+    "relaxedAutoImplicit": false,
+    "autoImplicit": false
+  },
+  "lean_githash": "98dc76e3c0a9b856c9b98726b713fb04fab16740",
+  "emitter_version": "mfc-emit/1.0.0",
+  "emitted_at": "2026-08-04T00:00:00Z",
+  "counts": {
+    "total": 0,
+    "in_scope": 0,
+    "internal": 0,
+    "with_range": 0,
+    "instances": 0,
+    "private": 0
+  },
+  "constants": []
+}

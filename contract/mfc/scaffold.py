@@ -265,6 +265,18 @@ FORMALIZATION_YAML = """\
 topic: @@TOPIC@@
 lean_library: @@LIB@@
 
+# This repository has no declarations yet, so its emission is empty, and an
+# empty emission does not validate -- `minItems: 1` on `constants[]` is the
+# vacuous-pass guard and it is doing its job. `bootstrap: true` suspends
+# exactly that one constraint so a new repository can reach a green build
+# before it has any mathematics in it. While it is set, every content rule
+# reports `not_run`: nothing here has been checked.
+#
+# It is WRITE-ONCE. `mfc lint` clears it the first time the emission is
+# non-empty and stamps `bootstrap_cleared_at`; after that, setting it again is
+# a hard failure. It is a starting state, not a way to silence the guard.
+bootstrap: true
+
 source:
   # The paper or book this topic formalizes.
   scheme: pending          # arxiv | textbook | none
@@ -363,7 +375,11 @@ jobs:
           use-mathlib-cache: true
 
       - name: install mfc
-        run: pip install '@@CONTRACT_URL@@/archive/@@CONTRACT_REV@@.tar.gz#subdirectory=contract'
+        # The `yaml` extra is not optional here. `formalization.yaml` carries
+        # the bootstrap flag, and a build that cannot read the flag cannot tell
+        # "this repository has not started yet" from "this emission is empty
+        # and should not be" -- so it fails rather than guessing.
+        run: pip install 'mfc[yaml] @ @@CONTRACT_URL@@/archive/@@CONTRACT_REV@@.tar.gz#subdirectory=contract'
 
       - name: emit
         run: |
