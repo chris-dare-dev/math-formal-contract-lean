@@ -137,6 +137,7 @@
         "doc",
         "local_deps",
         "scc_members",
+        "discharges",
         "axioms",
         "range",
         "cites"
@@ -216,6 +217,15 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "discharges": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+          },
+          "$comment": "Frontier ids this declaration CLAIMS to close, from `@[discharges]`. Axis 6 was hand-edited YAML that mfc only aggregated: nothing checked that the named discharger proves anything, and unlike the faithfulness axis it carried no reviewer and no date -- an axis that looked computed while being asserted. E-12 anchors the edge here, in Environment.constants."
         },
         "axioms": {
           "type": "array",

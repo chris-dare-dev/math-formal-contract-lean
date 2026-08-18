@@ -265,6 +265,28 @@ run_cmd Lean.Elab.Command.liftTermElabM do
   unless sorryN == 0 do
     throwError "multi-root emission reports {sorryN} sorry-backed constant(s)"
 
+/-! ## `@[discharges]` binds a frontier id to a declaration that compiles -/
+
+/-- A construction claiming to close a recorded gap. The claim lives here,
+next to the proof, rather than in hand-edited YAML somewhere else. -/
+@[discharges "gltilde-universal-cover"]
+theorem dischargesOne : True := trivial
+
+/-- One construction, two recorded gaps. Normal, and why the attribute takes a
+list rather than forcing two attributes that read as unrelated claims. -/
+@[discharges "first-gap", "second-gap"]
+theorem dischargesTwo : True := trivial
+
+run_cmd Lean.Elab.Command.liftTermElabM do
+  let env ← Lean.getEnv
+  let es := MathFormalContract.dischargesEntries env
+  unless es.any (fun e => e.frontierId == "gltilde-universal-cover"
+      && e.declName == `MathFormalContractTest.dischargesOne) do
+    throwError "the discharges extension lost a binding"
+  let two := es.filter (·.declName == `MathFormalContractTest.dischargesTwo)
+  unless two.size == 2 do
+    throwError "a two-id attribute recorded {two.size} binding(s), expected 2"
+
 #cites_dump
 
 end MathFormalContractTest

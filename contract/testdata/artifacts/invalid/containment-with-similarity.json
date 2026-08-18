@@ -9,28 +9,6 @@
   "generated_at": "2026-08-04T08:55:10Z",
   "results": [
     {
-      "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2",
-      "resolution": "current",
-      "matched_by": "quote_sha256",
-      "chunk_id": "arxiv:math/0212237:a82c3230040fd724",
-      "resolved_source_version": null,
-      "matched_body_sha256": "ebacfe5caa6c1df8229ec6bfbcf55f855a524a77cf78a9fb3171b81172d6f50d",
-      "printed_number": "8.2",
-      "similarity": null,
-      "reason": null
-    },
-    {
-      "key": "stmt:9f4c1a20b7d3:bridgeland2007.obl-stab-action",
-      "resolution": "not_run",
-      "matched_by": "none",
-      "chunk_id": null,
-      "resolved_source_version": null,
-      "matched_body_sha256": null,
-      "printed_number": null,
-      "similarity": null,
-      "reason": "kind==obligation and quote_sha256 is null; nothing to resolve"
-    },
-    {
       "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.3",
       "resolution": "current",
       "matched_by": "quote_containment",
@@ -38,15 +16,16 @@
       "resolved_source_version": null,
       "matched_body_sha256": "ebacfe5caa6c1df8229ec6bfbcf55f855a524a77cf78a9fb3171b81172d6f50d",
       "printed_number": "8.2",
-      "similarity": null,
+      "similarity": 0.97,
       "reason": "The chunker merged this statement's chunk with the following one; the quote is still present, so this is current by containment rather than by byte-equality."
     }
   ],
   "counts": {
-    "current": 2,
+    "current": 1,
     "drifted": 0,
     "unresolvable": 0,
     "paper_absent": 0,
-    "not_run": 1
-  }
+    "not_run": 0
+  },
+  "$comment_fixture": "REJECTION FIXTURE. A containment match carrying a similarity score. Containment is identity -- the statement is in the chunk or it is not -- and a number beside it invites the reading that this was a near-miss, which is the fuzzy rung wearing the containment rung's clothes."
 }

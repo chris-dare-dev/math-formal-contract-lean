@@ -35,6 +35,7 @@
       "doc": "The numerical Grothendieck group K_num(Ku(X)) of the Kuznetsov component, as a rank-two lattice.",
       "type_pp": "Type",
       "scc_members": [],
+      "discharges": [],
       "range": {
         "startLine": 112,
         "startCol": 0,

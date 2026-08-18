@@ -4,6 +4,7 @@ Released under the MIT license.
 -/
 import Lean
 import MathFormalContract.Cites
+import MathFormalContract.Discharges
 
 /-!
 # The emitter
@@ -165,6 +166,13 @@ private def sortedNames (ns : Array Name) : Array Name :=
   (ns.qsort (fun a b => a.toString < b.toString)).foldl (init := #[]) fun acc n =>
     if acc.back?.any (· == n) then acc else acc.push n
 
+/-- Sort a `String` array and drop duplicates. The `Name` version's twin; both
+exist because this package may not add a dependency to get `Array.eraseDups`.
+-/
+private def sortedStrings (ss : Array String) : Array String :=
+  (ss.qsort (· < ·)).foldl (init := #[]) fun acc s =>
+    if acc.back?.any (· == s) then acc else acc.push s
+
 /-- Topic-local constants occurring in `e`.
 
 "Topic-local" means declared in one of `mods`. External constants contribute
@@ -231,7 +239,8 @@ An `external` row never raises `in_scope`. It is a theorem someone else proved,
 in a package `environment.json` already pins by commit; counting it as this
 repository's own work is the vacuous pass with extra steps. -/
 private def rowJson (env : Environment) (mods : Std.HashSet Name)
-    (cites : Array CitesEntry) (n : Name) (modName : Name) (ci : ConstantInfo)
+    (cites : Array CitesEntry) (discharges : Array DischargesEntry)
+    (n : Name) (modName : Name) (ci : ConstantInfo)
     (scope : String) : MetaM (Json × Stats) := do
   -- SORT: `collectAxioms` output order is unspecified and observed unstable.
   let axs := (← collectAxioms n).map (·.toString) |>.qsort (· < ·)
@@ -265,6 +274,10 @@ private def rowJson (env : Environment) (mods : Std.HashSet Name)
       sortedNames (localConstsIn env mods ci.type ++ localConstsIn env mods v.value)
     | _ => localConstsIn env mods ci.type
   let myCites := cites.filter (·.declName == n)
+  -- Sorted and deduplicated, like every other array here: `discharges` is a
+  -- digest input for nobody today, but it IS a diff input for every reviewer,
+  -- and an unstable order would make a no-op re-emit look like a change.
+  let myDischarges := sortedStrings <| (discharges.filter (·.declName == n)).map (·.frontierId)
   let row := Json.mkObj [
     ("name",         Json.str n.toString),
     ("module",       Json.str modName.toString),
@@ -304,6 +317,11 @@ private def rowJson (env : Environment) (mods : Std.HashSet Name)
                          ("endLine",   Json.num r.range.endPos.line),
                          ("endCol",    Json.num r.range.endPos.column)]
                      | none => Json.null),
+    -- The frontier ids this declaration CLAIMS to close, from `@[discharges]`.
+    -- `mfc lint` rule E-12 is what turns the claim into an edge: a registry
+    -- `discharged_by` naming a declaration that does not carry the matching id
+    -- here is a discharge that exists only in prose.
+    ("discharges", Json.arr (myDischarges.map Json.str)),
     ("cites", Json.arr (myCites.map fun c => Json.mkObj [
                 ("key",              Json.str c.key),
                 -- Always `relation_claimed` in a machine artifact. An agent
@@ -368,6 +386,7 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
       ZERO constants. A declaration-free umbrella is not a complete topic scope; \
       pass its constituent library roots explicitly."
   let cites := citesEntries env
+  let discharges := dischargesEntries env
   -- Carried as `(name, json)` pairs so the final sort reads the name directly
   -- rather than projecting it back out of the JSON — `Json.getStr!` does not
   -- exist here, and a sort key recovered from a partial accessor would fail
@@ -378,7 +397,7 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
     let some ci := env.find? n | continue
     let some idx := env.getModuleIdxFor? n | continue
     let modName := allMods[idx.toNat]!
-    let (row, delta) ← rowJson env mods cites n modName ci "topic"
+    let (row, delta) ← rowJson env mods cites discharges n modName ci "topic"
     out := out.push (n.toString, row)
     st := st.add delta
   -- `external_decls[]`, from the registry. Emission is module-scoped to the
@@ -402,7 +421,7 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
     let some idx := env.getModuleIdxFor? n
       | throwError "mfc-emit: external_decls names {n}, which has no module. \
           Only imported constants may be bound externally."
-    let (row, delta) ← rowJson env mods cites n allMods[idx.toNat]! ci "external"
+    let (row, delta) ← rowJson env mods cites discharges n allMods[idx.toNat]! ci "external"
     out := out.push (n.toString, row)
     st := st.add delta
   -- Iteration order over modules and their constant lists is not specified.

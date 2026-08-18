@@ -224,11 +224,17 @@
               "required": [
                 "key",
                 "discharged_at",
-                "discharged_by_reviewer"
+                "discharged_by_reviewer",
+                "declaration"
               ],
               "properties": {
                 "key": {
                   "$ref": "#/$defs/citationKey"
+                },
+                "declaration": {
+                  "type": "string",
+                  "minLength": 1,
+                  "$comment": "The Lean declaration that discharges this item, and it must carry `@[discharges \"<this item's id>\"]` in the emission -- `mfc lint` E-12. Without it axis 6 was hand-edited YAML that mfc only aggregated: nothing checked the named discharger proves anything, so a discharge that existed only in prose was indistinguishable from a real one. This does not verify the mathematics; it removes the weaker failure."
                 },
                 "discharged_at": {
                   "$ref": "#/$defs/isoDate"
@@ -418,7 +424,8 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "$comment": "The MACHINE-OWNED quote: byte-equal to the chunk body as the corpus produced it, and the only text `quote_sha256` is computed over. Do NOT correct a LaTeXML artifact here -- see quote_as_read. `mint_resolution.matched_by: quote_sha256` requires byte-equality with the chunk, so any human correction made here permanently breaks exact match and silently demotes the entry to printed_number (36 of 66 chunks even on the flagship paper) or to unresolvable."
         },
         "quote_norm": {
           "const": "nfc-ws-collapse/1"
@@ -432,6 +439,13 @@
               "type": "null"
             }
           ]
+        },
+        "quote_as_read": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "$comment": "The HUMAN-OWNED quote: what a person read off the paper, with OCR and LaTeXML artifacts corrected. Displayed, never hashed, and deliberately not compared to `quote` -- they are supposed to differ, and the difference is the record of what the corpus got wrong. Null when no correction was needed."
         },
         "quote_digest_source": {
           "$comment": "digest_only mode: WHERE the hash came from, since the text is not inlined.",
@@ -613,5 +627,6 @@
         }
       ]
     }
-  }
+  },
+  "$comment": "QUOTE DIGEST GUARANTEE, stated honestly (#162): quote_sha256 is sha256(nfc-ws-collapse/1(quote)). It survives PREAMBLE-CLASS rotation -- an ingest that changes preamble_text and leaves body_text alone, e.g. ingest-recover-preambles -- and whitespace or Unicode-composition differences, which the normalization absorbs by construction. It does NOT survive a chunker bump: re-chunking changes chunk boundaries, which changes body_text, which changes this hash EXACTLY AS IT CHANGES chunk_id. The design's claim that it survives 'a chunker bump, an ar5iv re-render, a LaTeXML upgrade, an HTML-to-MinerU migration' was true of the first class only. What survives a merge or split is the quote_containment resolution rung, not this digest."
 }

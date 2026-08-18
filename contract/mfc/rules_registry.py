@@ -54,7 +54,7 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
-from .digest import quote_sha256
+from .digest import norm_text, quote_sha256
 from .registry import RegistryShapeError, entries as registry_entries
 from .rules import Finding, RuleResult, Status
 
@@ -274,6 +274,28 @@ def check(
                         f"{len(digests)} different environments across its "
                         f"external bindings; they cannot all be current"))
     add("R-11", "all external bindings pin one environment", r11)
+
+    # R-12 -- `quote_as_read` records a CORRECTION, so an identical copy of
+    # `quote` records nothing while implying one was needed.
+    #
+    # The split itself is already enforced: R-02 recomputes `quote_sha256` from
+    # `quote`, so hashing the human-corrected text instead fails there. This
+    # rule guards the other direction -- a field filled in out of habit, which
+    # makes a reader believe a human checked the text against the paper when
+    # all that happened was a copy-paste.
+    r12: list[Finding] = []
+    for key, e in sorted(entries.items()):
+        as_read = e.get("quote_as_read")
+        if not isinstance(as_read, str):
+            continue
+        minted = e.get("quote")
+        if isinstance(minted, str) and norm_text(as_read) == norm_text(minted):
+            r12.append(Finding(
+                "R-12", key,
+                "quote_as_read is identical to quote after normalization; the "
+                "field exists to record what the corpus got wrong, and a copy "
+                "records nothing while implying a correction was made"))
+    add("R-12", "quote_as_read differs from the machine-owned quote", r12)
 
     return results
 

@@ -238,6 +238,12 @@ def test_r04_tolerates_a_deep_dependency_chain() -> None:
     for i, key in enumerate(keys):
         e = json.loads(json.dumps(base))
         e["depends_on"] = [keys[i + 1]] if i + 1 < len(keys) else []
+        # The clones inherit the base entry's frontier, whose `discharged_by`
+        # names a key that exists in the real registry and not in this
+        # synthetic one. This test is about depth in `depends_on`; a dangling
+        # discharge reference here would trip R-04 for an unrelated reason.
+        for item in e.get("frontier") or []:
+            item["discharged_by"] = None
         entries[key] = e
     doc["entries"] = entries
     assert _run(doc)["R-04"] is Status.PASS

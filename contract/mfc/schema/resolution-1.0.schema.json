@@ -98,7 +98,8 @@
         "matched_body_sha256",
         "printed_number",
         "similarity",
-        "reason"
+        "reason",
+        "resolved_source_version"
       ],
       "properties": {
         "key": {
@@ -117,16 +118,25 @@
         "matched_by": {
           "enum": [
             "quote_sha256",
+            "quote_containment",
             "printed_number",
             "fuzzy",
             "none"
-          ]
+          ],
+          "$comment": "Ordered strongest to weakest. `quote_sha256` is byte-equality after normalization. `quote_containment` -- the chunk body CONTAINS the normalized quote -- is what actually survives a re-chunk that merges or splits the statement's chunk, and it reads `current`: containment is an identity claim, not a similarity score, which is why it sits above `fuzzy` and not beside it. `fuzzy` may never read `current`; similarity is not identity."
         },
         "chunk_id": {
           "type": [
             "string",
             "null"
           ]
+        },
+        "resolved_source_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "$comment": "The source version this result was resolved against -- the arXiv vN, or null. Null is currently the ONLY honest value: the corpus records arxiv_version as '' for every row in every notebook (8/8 sampled in each), so nothing can fill this until the ingest backfill lands. It is present and nullable rather than absent so that a resolution which CAN say which version it read has somewhere to say it, and one that cannot is visibly silent rather than silently unversioned."
         },
         "matched_body_sha256": {
           "type": [
@@ -229,6 +239,33 @@
                 "enum": [
                   "drifted"
                 ]
+              }
+            }
+          }
+        },
+        {
+          "$comment": "`quote_containment` may read `current`, and that is the whole point of the rung: containment is an IDENTITY claim -- the statement is in the chunk or it is not -- where `fuzzy` is an estimate. It still owes the same evidence as any other current result (the first conditional above), and it must carry NO similarity score: a number there would invite exactly the reading that this is a near-miss.",
+          "if": {
+            "properties": {
+              "matched_by": {
+                "const": "quote_containment"
+              }
+            },
+            "required": [
+              "matched_by"
+            ]
+          },
+          "then": {
+            "properties": {
+              "resolution": {
+                "enum": [
+                  "current",
+                  "drifted",
+                  "unresolvable"
+                ]
+              },
+              "similarity": {
+                "type": "null"
               }
             }
           }

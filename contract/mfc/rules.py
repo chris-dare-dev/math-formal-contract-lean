@@ -54,6 +54,7 @@ RULE_TITLES: tuple[tuple[str, str], ...] = (
     ("E-09", "no declaration reaches into a closed lane"),
     ("E-10", "axioms and local_deps are sorted ascending"),
     ("E-11", "no unfinished declaration claims forbidden vocabulary"),
+    ("E-12", "every frontier discharge is anchored in the environment"),
 )
 
 
@@ -332,6 +333,61 @@ def check(
                                 f"{lane['name']!r}, while its own citation "
                                 f"records an open frontier"))
         add("E-11", "no unfinished declaration claims forbidden vocabulary", e11)
+
+    # E-12 -- axis 6, made computed.
+    #
+    # The design's own rule: "two axes are distinct only if they have distinct
+    # evidence-producing programs", used to kill a competing design's
+    # three-views-of-one-closure axes. Axis 6 broke it.
+    # `frontier[].discharged_by` was hand-edited YAML that `mfc` only
+    # AGGREGATED -- nothing checked the named discharger proves anything, and
+    # unlike the faithfulness axis it carried no reviewer and no date. Two of
+    # seven axes were human and one of them was unattributed while presenting
+    # as computed.
+    #
+    # This does not check that the declaration proves the item; nothing
+    # mechanical can, because a frontier item is prose about a gap in the
+    # world. It checks the weaker thing that WAS indistinguishable from a real
+    # discharge in every artifact: that the named declaration exists and that
+    # it claims, in code that had to compile, to discharge THIS id.
+    if known is None:
+        results.append(RuleResult(
+            "E-12", "every frontier discharge is anchored in the environment",
+            Status.NOT_RUN,
+            reason="no registry supplied (--registry); the discharge edges live "
+                   "in the registry and the anchors live in the emission, so "
+                   "this rule needs both"))
+    else:
+        by_name = {c["name"]: c for c in constants}
+        e12: list[Finding] = []
+        for key, entry in sorted(known.items()):
+            for item in entry.get("frontier") or []:
+                if not isinstance(item, dict):
+                    continue
+                discharged = item.get("discharged_by")
+                if not isinstance(discharged, dict):
+                    continue
+                item_id = item.get("id")
+                decl = discharged.get("declaration")
+                if not decl:
+                    e12.append(Finding(
+                        "E-12", key,
+                        f"frontier {item_id!r} is discharged but names no "
+                        f"declaration; the edge exists only in prose"))
+                    continue
+                constant = by_name.get(decl)
+                if constant is None:
+                    e12.append(Finding(
+                        "E-12", key,
+                        f"frontier {item_id!r} is discharged by {decl!r}, which "
+                        f"is not in the emission at all"))
+                elif item_id not in (constant.get("discharges") or []):
+                    e12.append(Finding(
+                        "E-12", key,
+                        f"frontier {item_id!r} is discharged by {decl!r}, which "
+                        f"carries no @[discharges \"{item_id}\"]. The registry "
+                        f"claims an edge the environment does not"))
+        add("E-12", "every frontier discharge is anchored in the environment", e12)
 
     return results
 
