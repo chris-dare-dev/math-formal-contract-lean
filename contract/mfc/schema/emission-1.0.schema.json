@@ -72,7 +72,8 @@
         "with_range",
         "instances",
         "private",
-        "external"
+        "external",
+        "foreign"
       ],
       "properties": {
         "total": {
@@ -103,6 +104,11 @@
           "type": "integer",
           "minimum": 0,
           "$comment": "Counted separately and NEVER folded into in_scope or the vacuous-pass minimums. A repo whose only non-empty count is `external` has formalized nothing and must not pass."
+        },
+        "foreign": {
+          "type": "integer",
+          "minimum": 0,
+          "$comment": "Constants listed by an in-scope module but OWNED by an out-of-scope one -- auto-generated equation and congruence lemmas whose parent lives upstream. They are excluded from constants[] and counted here. Measured on derived-alg-geo-lean: 8 of 15346, arriving with module: Mathlib.* while modules[] listed no Mathlib module at all, so the artifact contradicted itself and I-05 was right to fail. Counted rather than silently dropped, because a filter that quietly shrinks an emission is the failure class this package exists to prevent."
         }
       },
       "$comment": "minimum:1 on total and in_scope is the VACUOUS-PASS GUARD. An emission of zero constants is the observable signature of a mis-scoped emitter, and it must not validate."

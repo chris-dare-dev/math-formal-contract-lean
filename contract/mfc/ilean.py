@@ -20,8 +20,9 @@ The circularity trap is real and worth stating. The emission carries a
 `.ilean` files against *that* would check the emitter against itself: a scope
 bug that dropped a module would drop it from both sides and pass. So the
 in-scope set is re-derived here, from the filesystem, using only the emission's
-**declared** `root_lib` — which the caller passes in, and which `--lib`
-overrides. `I-04` then compares the two derivations, which is the check that
+**declared** roots — which the caller passes in, and which `--lib` overrides.
+`--lib` is repeatable, because the emitter's `additionalRoots` means a topic
+legitimately has more than one; see `roots_of`. `I-04` then compares the two derivations, which is the check that
 finds a scope bug rather than inheriting it.
 
 ## Module prefixes are matched component-wise, never as strings
@@ -164,10 +165,38 @@ def load_modules(build_dir: Path) -> list[Module]:
     return out
 
 
-def check(emission: dict, modules: list[Module], *, lib: str | None = None
-          ) -> list[RuleResult]:
+def roots_of(emission: dict, lib: str | list[str] | None = None) -> list[str]:
+    """The module roots this emission is scoped to.
+
+    **A topic may have more than one, and this repo's own consumer does.** The
+    emitter takes `additionalRoots` precisely so a monorepo can keep a thin
+    combined umbrella while sweeping the declarations owned by each constituent
+    library — `derived-alg-geo-lean` emits with `rootLib := DerivedAlgGeoSweep`
+    and `additionalRoots := [DerivedAlgGeo]`.
+
+    Scoping to `root_lib` alone got that badly wrong in both directions, and
+    the failure is loud rather than subtle: with the sweep module as the only
+    root, `I-05` fails on every constant the library declares, because they all
+    come from modules outside it. With `DerivedAlgGeo` as the only root, `I-04`
+    and `I-05` fail on the sweep module instead. Neither is a defect in the
+    repository being checked; both are this function's predecessor answering a
+    single-root question about a two-root emission.
+
+    `lib` overrides, and accepts a list for exactly that reason.
+    """
+    if isinstance(lib, str):
+        return [lib]
+    if lib:
+        return list(lib)
+    declared = emission.get("root_lib")
+    return [declared] if declared else []
+
+
+def check(emission: dict, modules: list[Module], *,
+          lib: str | list[str] | None = None) -> list[RuleResult]:
     """Run I-01..I-05 against an emission and the modules Lake actually built."""
-    root = lib or emission.get("root_lib")
+    roots = roots_of(emission, lib)
+    root = roots[0] if roots else None
     results: list[RuleResult] = []
     # `scope: external` rows are excluded from every rule here, and the reason
     # is the same one that makes them safe: they are constants someone else
@@ -195,9 +224,10 @@ def check(emission: dict, modules: list[Module], *, lib: str | None = None
                      "built modules should have been swept"),)))
         return results
     add("I-01", "the emission declares a root library", [],
-        reason=f"root_lib = {root!r}")
+        reason=f"roots = {roots!r}")
 
-    in_scope = [m for m in modules if is_under(m.name, root)]
+    in_scope = [m for m in modules
+                if any(is_under(m.name, r) for r in roots)]
     built = {d for m in in_scope for d in m.decls}
 
     # I-02 -- the vacuous pass. Empty emission over a non-empty build.
@@ -258,7 +288,7 @@ def check(emission: dict, modules: list[Module], *, lib: str | None = None
 
 
 def allowlist(modules: list[Module], permitted_prefixes: list[str] | None, *,
-              root: str) -> RuleResult:
+              root: str | list[str]) -> RuleResult:
     """`I-06` — every direct import of an in-scope module is on the allowlist.
 
     ## Why an allowlist, when `E-09` already has a denylist
@@ -299,7 +329,11 @@ def allowlist(modules: list[Module], permitted_prefixes: list[str] | None, *,
         return RuleResult("I-06", title, Status.NOT_RUN,
                           reason="no permitted_module_prefixes configuration "
                                  "supplied (--closed-lanes)")
-    in_scope = [m for m in modules if root and is_under(m.name, root)]
+    # A topic may have several roots (see `roots_of`); a module's imports of
+    # ANY of them are its own library's, not a reach outside it.
+    roots = [root] if isinstance(root, str) else list(root)
+    roots = [r for r in roots if r]
+    in_scope = [m for m in modules if any(is_under(m.name, r) for r in roots)]
     blind = [m for m in in_scope if m.direct_imports is None]
     if blind:
         return RuleResult(
@@ -323,7 +357,7 @@ def allowlist(modules: list[Module], permitted_prefixes: list[str] | None, *,
     findings: list[Finding] = []
     for module in sorted(in_scope):
         for imported in sorted(module.direct_imports or ()):
-            if is_under(imported, root):
+            if any(is_under(imported, r) for r in roots):
                 continue
             if any(is_under(imported, prefix) for prefix in prefixes):
                 continue
@@ -344,10 +378,11 @@ class Coverage(NamedTuple):
     missing: int
 
 
-def coverage(emission: dict, modules: list[Module], *, lib: str | None = None
-             ) -> Coverage:
-    root = lib or emission.get("root_lib") or ""
-    in_scope = [m for m in modules if root and is_under(m.name, root)]
+def coverage(emission: dict, modules: list[Module], *,
+             lib: str | list[str] | None = None) -> Coverage:
+    roots = roots_of(emission, lib)
+    in_scope = [m for m in modules
+                if any(is_under(m.name, r) for r in roots)]
     built = {d for m in in_scope for d in m.decls}
     names = {c["name"] for c in emission["constants"]
              if c.get("scope", "topic") != "external"}

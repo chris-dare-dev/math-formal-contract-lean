@@ -198,6 +198,11 @@ private structure Stats where
   instances : Nat := 0
   privateN  : Nat := 0
   sorryN    : Nat := 0
+  /-- Constants listed by an in-scope module but OWNED by an out-of-scope one:
+  auto-generated equation and congruence lemmas whose parent lives upstream.
+  Excluded from `constants[]` and counted here, so the exclusion is visible in
+  the artifact rather than being a silent shrink. -/
+  foreign   : Nat := 0
   /-- Constants named by `external_decls[]` and swept from OUTSIDE the topic's
   module scope. Counted separately and never folded into `inScope`: an
   external constant is a theorem someone else proved, and letting it raise
@@ -215,6 +220,7 @@ private def Stats.add (a b : Stats) : Stats where
   privateN  := a.privateN + b.privateN
   sorryN    := a.sorryN + b.sorryN
   external  := a.external + b.external
+  foreign   := a.foreign + b.foreign
 
 /-- The module set in scope for one or more library roots: each root module and
 everything below it. A topic monorepo can therefore keep a thin combined
@@ -397,6 +403,22 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
     let some ci := env.find? n | continue
     let some idx := env.getModuleIdxFor? n | continue
     let modName := allMods[idx.toNat]!
+    -- A constant listed in an in-scope module's `constNames` whose OWNING
+    -- module is out of scope is not this topic's declaration.
+    --
+    -- Measured on derived-alg-geo-lean: 8 of 15346, every one an
+    -- auto-generated equation or congruence lemma (`.congr_simp`, `.eq_1`)
+    -- whose parent lives in Mathlib, and which Lean attributes to the parent's
+    -- module. They arrived in `constants[]` with `module: Mathlib.…` while
+    -- `modules[]` -- computed from the scope -- listed no Mathlib module at
+    -- all, so the artifact contradicted itself and `I-05` was right to fail.
+    --
+    -- Counted, never silently dropped: `counts.foreign` is what stops this
+    -- being a filter that quietly shrinks the emission, which is the class of
+    -- fix this package exists to make impossible.
+    if !mods.contains modName then
+      st := st.add { total := 1, foreign := 1 }
+      continue
     let (row, delta) ← rowJson env mods cites discharges n modName ci "topic"
     out := out.push (n.toString, row)
     st := st.add delta
@@ -442,7 +464,8 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
         ("with_range", Json.num st.withRange),
         ("instances",  Json.num st.instances),
         ("private",    Json.num st.privateN),
-        ("external",   Json.num st.external)]),
+        ("external",   Json.num st.external),
+        ("foreign",    Json.num st.foreign)]),
     ("constants",  Json.arr sortedOut),
     ("emitted_at", Json.str emittedAt)]
   return (doc, st.sorryN)

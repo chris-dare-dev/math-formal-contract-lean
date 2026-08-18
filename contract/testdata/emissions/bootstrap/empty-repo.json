@@ -27,7 +27,8 @@
     "with_range": 0,
     "instances": 0,
     "private": 0,
-    "external": 0
+    "external": 0,
+    "foreign": 0
   },
   "constants": []
 }

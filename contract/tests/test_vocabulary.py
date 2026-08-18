@@ -58,7 +58,8 @@ def _emission(constants: list[dict]) -> dict:
         "schema_version": "emission/1.0", "root_lib": "Topic",
         "modules": ["Topic"], "constants": constants,
         "counts": {"total": len(constants), "in_scope": len(constants),
-                   "internal": 0, "with_range": 0, "instances": 0, "private": 0},
+                   "internal": 0, "with_range": 0, "instances": 0, "private": 0,
+                   "external": 0, "foreign": 0},
     }
 
 

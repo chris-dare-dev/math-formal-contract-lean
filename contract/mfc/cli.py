@@ -39,6 +39,7 @@ from .env import EnvError
 from .env import build as env_build
 from .ilean import DEFAULT_BUILD_DIR, IleanError
 from .ilean import allowlist as ilean_allowlist
+from .ilean import roots_of as ilean_roots
 from .ilean import check as ilean_check
 from .ilean import coverage as ilean_coverage
 from .ilean import load_modules
@@ -706,7 +707,7 @@ def cmd_check_ilean_coverage(args: argparse.Namespace) -> int:
 
     results = ilean_check(emission, modules, lib=args.lib)
     results.append(ilean_allowlist(
-        modules, permitted, root=args.lib or emission.get("root_lib") or ""))
+        modules, permitted, root=ilean_roots(emission, args.lib)))
     rc = _report(results, args.require_all)
 
     c = ilean_coverage(emission, modules, lib=args.lib)
@@ -1089,8 +1090,12 @@ def build_parser() -> argparse.ArgumentParser:
                      help="JSON carrying permitted_module_prefixes[]; enables I-06")
     cov.add_argument("--build-dir", dest="build_dir",
                      help=f"where lake writes .ilean (default: {DEFAULT_BUILD_DIR})")
-    cov.add_argument("--lib", help="root library module name; overrides the "
-                                   "emission's declared root_lib")
+    cov.add_argument("--lib", action="append", default=None,
+                     help="root library module name; overrides the emission's "
+                          "declared root_lib. REPEATABLE: the emitter takes "
+                          "additionalRoots, so a monorepo legitimately has "
+                          "more than one root and scoping to a single one "
+                          "fails I-04 and I-05 on the other's modules")
     cov.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     cov.set_defaults(func=cmd_check_ilean_coverage)
