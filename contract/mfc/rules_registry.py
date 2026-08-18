@@ -297,6 +297,43 @@ def check(
                 "records nothing while implying a correction was made"))
     add("R-12", "quote_as_read differs from the machine-owned quote", r12)
 
+    # R-13 -- Q5/#163, the owner decision of 2026-08-18: `quote_mode` is
+    # required from v1, and `verbatim` is the default for arXiv sources.
+    #
+    # A required field has no unspecified case, so "default" cannot mean "what
+    # you get when it is omitted". It is expressed as what DEVIATING costs: an
+    # arXiv source permits inlining -- Bridgeland 2007 is perpetual
+    # non-exclusive -- so `digest_only` there is a choice, and it is an
+    # expensive one. It removes offline verification, the property that makes
+    # the contract work with arXMCP deleted from the machine, and it degrades
+    # resolution to `printed_number`, which is the field most likely to be
+    # ABSENT: 36 of 66 chunks even on the flagship paper, and never populated
+    # at all on the textbook and MinerU paths.
+    #
+    # A licence that forbids inlining is not a choice and is not asked to
+    # justify itself, which is why this fires on `arxiv` alone. An OBLIGATION
+    # is exempt for a different reason: it is work that is owed, with no
+    # statement minted yet, so it is not declining verbatim -- it has nothing
+    # to inline.
+    #
+    # Backstop, like R-01 and R-06: the schema rejects it first.
+    r13: list[Finding] = []
+    for key, e in sorted(entries.items()):
+        if e.get("quote_mode") != "digest_only":
+            continue
+        if e.get("kind") == "obligation":
+            continue
+        if (e.get("source") or {}).get("scheme") != "arxiv":
+            continue
+        if not (e.get("quote_mode_reason") or "").strip():
+            r13.append(Finding(
+                "R-13", key,
+                "digest_only on an arXiv source with no quote_mode_reason. "
+                "verbatim was available and was declined; the entry loses "
+                "offline verification and falls back to printed_number, which "
+                "is absent for 30 of 66 chunks on the flagship paper alone"))
+    add("R-13", "digest_only on an arXiv source states why", r13)
+
     return results
 
 
