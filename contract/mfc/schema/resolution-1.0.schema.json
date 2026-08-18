@@ -98,7 +98,8 @@
         "matched_body_sha256",
         "printed_number",
         "similarity",
-        "reason"
+        "reason",
+        "resolved_source_version"
       ],
       "properties": {
         "key": {
@@ -127,6 +128,13 @@
             "string",
             "null"
           ]
+        },
+        "resolved_source_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "$comment": "The source version this result was resolved against -- the arXiv vN, or null. Null is currently the ONLY honest value: the corpus records arxiv_version as '' for every row in every notebook (8/8 sampled in each), so nothing can fill this until the ingest backfill lands. It is present and nullable rather than absent so that a resolution which CAN say which version it read has somewhere to say it, and one that cannot is visibly silent rather than silently unversioned."
         },
         "matched_body_sha256": {
           "type": [

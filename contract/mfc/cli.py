@@ -31,6 +31,8 @@ from .bundle import BundleError, build_declarations, dumps
 from .conformance import check as conformance_check
 from .conformance import evidence_table, gather
 from .digest import file_digest
+from .freshness import DEFAULT_MAX_AGE_DAYS, FreshnessError
+from .freshness import check as freshness_check
 from .env import EnvError
 from .env import build as env_build
 from .ilean import DEFAULT_BUILD_DIR, IleanError
@@ -861,6 +863,40 @@ def cmd_registry_external_decls(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_check_resolution(args: argparse.Namespace) -> int:
+    path = Path(args.resolution)
+    if not path.is_file():
+        print(f"error: no such resolution: {path}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        document = load_artifact(path)
+    except (LoadError, OSError) as exc:
+        print(f"error: {path.name}: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _validate_against(document, "resolution/1.0", path.name)
+    if rc is not None:
+        return rc
+
+    registry_sha = None
+    if args.registry:
+        registry_path = Path(args.registry)
+        if not registry_path.is_file():
+            print(f"error: no such registry: {registry_path}", file=sys.stderr)
+            return EXIT_USAGE
+        # The bytes on disk, not a field anyone typed.
+        registry_sha = file_digest(registry_path)
+
+    try:
+        results = freshness_check(
+            document, registry_sha256=registry_sha,
+            manifest_hash=args.manifest_hash, max_age_days=args.max_age_days)
+    except FreshnessError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    return _report(results, args.require_all)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfc",
@@ -1051,6 +1087,23 @@ def build_parser() -> argparse.ArgumentParser:
     ini.add_argument("--dry-run", dest="dry_run", action="store_true",
                      help="list what would be written and exit")
     ini.set_defaults(func=cmd_init)
+
+    res = sub.add_parser(
+        "check-resolution",
+        help="the freshness gate over resolution.json",
+        description="Distinguishes DRIFT (the corpus moved) from STALENESS "
+                    "(nobody has looked). They are different facts and must "
+                    "not share a finding.")
+    res.add_argument("resolution", help="path to attest/resolution.json")
+    res.add_argument("--registry", help="registry file, hashed to check F-01")
+    res.add_argument("--manifest-hash", dest="manifest_hash",
+                     help="live corpus manifest content hash; enables F-02")
+    res.add_argument("--max-age-days", dest="max_age_days", type=int,
+                     default=DEFAULT_MAX_AGE_DAYS,
+                     help=f"staleness limit (default: {DEFAULT_MAX_AGE_DAYS})")
+    res.add_argument("--require-all", dest="require_all", action="store_true",
+                     help="treat any not_run rule as a failure")
+    res.set_defaults(func=cmd_check_resolution)
 
     reg = sub.add_parser(
         "registry",

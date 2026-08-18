@@ -98,6 +98,7 @@ def _resolution(*results: dict) -> dict:
 def _result(key: str, resolution: str = "current") -> dict:
     return {"key": key, "resolution": resolution, "matched_by": "quote_sha256",
             "chunk_id": "arxiv:math/0212237:a82c3230040fd724",
+            "resolved_source_version": None,
             "matched_body_sha256": "e" * 64, "printed_number": "8.2",
             "similarity": None, "reason": None}
 
