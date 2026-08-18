@@ -1,0 +1,30 @@
+{
+  "schema_version": "restate/1.0",
+  "lean_version": "4.32.1",
+  "checked_at": "2026-08-18T17:40:00Z",
+  "counts": {
+    "restated": 1,
+    "changed": 1,
+    "not_checkable": 1
+  },
+  "results": [
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.2",
+      "decl": "DerivedAlgGeo.Lattice.finrank_numLattice",
+      "outcome": "restated",
+      "reason": null
+    },
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.3",
+      "decl": "DerivedAlgGeo.Lattice.mukaiPairing",
+      "outcome": "changed",
+      "reason": "elaborates, but is not defeq to the current type"
+    },
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.prop-8.1",
+      "decl": "DerivedAlgGeo.Stability.slicing",
+      "outcome": "not_checkable",
+      "reason": "elaboration logged an error: unknown identifier 'Slicing'"
+    }
+  ]
+}

@@ -77,6 +77,13 @@
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
+        "reviewed_statement_pp": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "$comment": "The statement AS THE REVIEWER READ IT, pretty-printed under `pp.explicit := true`. This is NOT the emission's `type_pp`, and reusing that is the trap: the emitter pins `pp.explicit := false`, and under those options 5 of 76 declarations fail to elaborate with unresolved metavariables where 0 fail with implicits printed. A restate-check built on `type_pp` would report not_checkable on statements that are perfectly fine. Null when a review predates the field; `mfc restate-check` reports those as not_checkable rather than assuming."
+        },
         "reviewed_quote_sha256": {
           "type": [
             "string",
