@@ -56,7 +56,7 @@ def _schema(name: str) -> dict:
 
 
 def test_every_schema_is_present() -> None:
-    """Eleven.
+    """Twelve.
 
     `registry-1.0` joined the original seven once the accessor work showed the
     schema was fully specified in the design note and blocked on nothing — the
@@ -81,11 +81,17 @@ def test_every_schema_is_present() -> None:
     one reason: a withdrawal can only remove trust, never grant it. Everything
     else in the contract is pinned precisely so a consumer cannot be handed a
     claim its pinned review never covered.
+
+    `restate-1.0` is the twelfth. It is the only artifact whose producer is
+    Lean rather than `mfc`: parsing and elaborating a statement to ask whether
+    a review survives a Mathlib bump cannot be done from Python, and a
+    reimplementation here would be a second answer to a question the first one
+    already answers.
     """
     assert SCHEMAS == [
         "build-1.0", "bundle-1.0", "declarations-1.0", "emission-1.0",
-        "environment-1.0", "registry-1.0", "resolution-1.0", "review-1.0",
-        "run-1.0", "withdrawals-1.0", "workqueue-1.0",
+        "environment-1.0", "registry-1.0", "resolution-1.0", "restate-1.0",
+        "review-1.0", "run-1.0", "withdrawals-1.0", "workqueue-1.0",
     ]
 
 

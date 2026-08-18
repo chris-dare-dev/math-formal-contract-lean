@@ -5,6 +5,7 @@ Released under the MIT license.
 import MathFormalContract.Cites
 import MathFormalContract.Discharges
 import MathFormalContract.Emit
+import MathFormalContract.RestateCheck
 
 /-!
 # MathFormalContract

@@ -287,6 +287,49 @@ run_cmd Lean.Elab.Command.liftTermElabM do
   unless two.size == 2 do
     throwError "a two-id attribute recorded {two.size} binding(s), expected 2"
 
+/-! ## `restate-check`: three outcomes, and the third is not the second -/
+
+/-- A statement to check against. Its pretty-printed form under
+`pp.explicit := true` is what a reviewer would have recorded. -/
+theorem restateSubject (n : Nat) : n + 0 = n := Nat.add_zero n
+
+open MathFormalContract in
+run_cmd Lean.Elab.Command.liftTermElabM do
+  -- RESTATED: the statement as written elaborates and is defeq.
+  let ok ← restateOne "stmt:9f4c1a20b7d3:x" ``restateSubject
+    "∀ (n : Nat), n + 0 = n"
+  unless ok.outcome == .restated do
+    throwError "expected restated, got {ok.outcome.toString} ({ok.reason})"
+
+  -- CHANGED: elaborates fine, different statement. The review is invalidated.
+  let changed ← restateOne "stmt:9f4c1a20b7d3:x" ``restateSubject
+    "∀ (n : Nat), n + 1 = n"
+  unless changed.outcome == .changed do
+    throwError "expected changed, got {changed.outcome.toString} ({changed.reason})"
+
+  -- NOT_CHECKABLE, parse: nobody knows whether it changed.
+  let unparseable ← restateOne "stmt:9f4c1a20b7d3:x" ``restateSubject "∀ (n : Nat"
+  unless unparseable.outcome == .notCheckable do
+    throwError "expected not_checkable for a parse failure"
+
+  -- NOT_CHECKABLE, elaboration. THIS is the load-bearing one: `elabTerm` LOGS
+  -- this error rather than throwing it, so a try/catch alone would report
+  -- success here and leak the error into this build's output.
+  let unelaborable ← restateOne "stmt:9f4c1a20b7d3:x" ``restateSubject
+    "∀ (n : Nat), n + noSuchConstantAnywhere = n"
+  unless unelaborable.outcome == .notCheckable do
+    throwError "expected not_checkable for a logged elaboration error, got \
+      {unelaborable.outcome.toString}"
+  unless unelaborable.reason != "" do
+    throwError "a not_checkable with no reason is one nobody can act on"
+
+  -- A declaration that is not here at all.
+  let absent ← restateOne "stmt:9f4c1a20b7d3:x" `NoSuchDeclaration "True"
+  unless absent.outcome == .notCheckable do
+    throwError "expected not_checkable for an absent declaration"
+
+  logInfo "restate-check: restated / changed / not_checkable all reachable"
+
 #cites_dump
 
 end MathFormalContractTest

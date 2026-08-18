@@ -33,6 +33,9 @@ from .conformance import evidence_table, gather
 from .digest import file_digest
 from .freshness import DEFAULT_MAX_AGE_DAYS, FreshnessError
 from .freshness import check as freshness_check
+from .restate import RestateError
+from .restate import carried_forward
+from .restate import check as restate_check
 from .withdrawals import WithdrawalsError
 from .withdrawals import check as withdrawals_check
 from .env import EnvError
@@ -933,6 +936,46 @@ def cmd_withdrawals_check(args: argparse.Namespace) -> int:
     return rc
 
 
+def cmd_restate_check(args: argparse.Namespace) -> int:
+    path = Path(args.restate)
+    if not path.is_file():
+        print(f"error: no such restate report: {path}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        document = load_artifact(path)
+        review = load_artifact(Path(args.review)) if args.review else None
+    except (LoadError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _validate_against(document, "restate/1.0", path.name)
+    if rc is not None:
+        return rc
+    if review is not None:
+        rc = _validate_against(review, "review/1.0", Path(args.review).name)
+        if rc is not None:
+            return rc
+
+    try:
+        results = restate_check(document, review=review)
+    except RestateError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    rc = _report(results, args.require_all)
+
+    c = document.get("counts", {})
+    print(f"\n{path.name}: {c.get('restated', 0)} restated, "
+          f"{c.get('changed', 0)} changed, "
+          f"{c.get('not_checkable', 0)} not_checkable")
+    # Never summed, and the reason is printed rather than assumed: a reader who
+    # adds `changed` and `not_checkable` together has invented a number that
+    # means "reviews I should distrust", which is not what either says.
+    print(f"{path.name}: {len(carried_forward(document))} review(s) may be "
+          f"carried forward. `changed` invalidates; `not_checkable` means "
+          f"nobody knows, which is also not a pass.", file=sys.stderr)
+    return rc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfc",
@@ -1147,6 +1190,17 @@ def build_parser() -> argparse.ArgumentParser:
     res.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     res.set_defaults(func=cmd_check_resolution)
+
+    rst = sub.add_parser(
+        "restate-check",
+        help="read the Lean restate run: does human review survive the bump",
+        description="Three outcomes, no aggregate. `restated` carries a review "
+                    "forward; `changed` invalidates it; `not_checkable` means "
+                    "nobody knows, and is never evidence that it changed.")
+    rst.add_argument("restate", help="path to the restate/1.0 report")
+    rst.add_argument("--review", help="attest/review.yaml; enables T-01 and T-02")
+    rst.add_argument("--require-all", dest="require_all", action="store_true")
+    rst.set_defaults(func=cmd_restate_check)
 
     wd = sub.add_parser(
         "check-withdrawals",

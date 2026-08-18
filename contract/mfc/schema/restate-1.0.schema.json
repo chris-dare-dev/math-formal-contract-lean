@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chris-dare-dev/math-formal-contract-lean/schema/restate-1.0.schema.json",
+  "title": "restate/1.0 - does a human review survive a Mathlib or anchor bump",
+  "$comment": "env_digest includes every package revision, so `statement_stable` is not_applicable across environments BY CONSTRUCTION -- a single bump invalidates 100% of human review at once, and recovery costs the entire original review budget, per bump, at ~2h an entry. This artifact is what stands between that and re-reviewing everything. It carries three outcomes and NO aggregate: `not_checkable` is not `changed`, and collapsing them would send a reviewer to re-read a statement that may be perfectly fine while hiding that the tool failed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lean_version",
+    "checked_at",
+    "counts",
+    "results"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "restate/1.0"
+    },
+    "lean_version": {
+      "type": "string"
+    },
+    "checked_at": {
+      "type": "string"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "restated",
+        "changed",
+        "not_checkable"
+      ],
+      "$comment": "Per outcome, never totalled. A single number here would be the aggregate token every schema in this contract refuses.",
+      "properties": {
+        "restated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_checkable": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "decl",
+          "outcome",
+          "reason"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^stmt:[0-9a-f]{12}:[a-z][a-z0-9._-]{0,63}$"
+          },
+          "decl": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outcome": {
+            "enum": [
+              "restated",
+              "changed",
+              "not_checkable"
+            ],
+            "$comment": "`restated`: elaborates and is defeq -- the review survives. `changed`: elaborates, not defeq -- the review is invalidated and must be redone. `not_checkable`: could not be parsed or elaborated, so NOBODY KNOWS whether it changed."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "$comment": "Why. Mandatory in shape for not_checkable -- 'parse failed' and 'elaboration logged an error' send a reviewer to different places, and an outcome nobody can act on is not a finding."
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "A not_checkable with no reason is unactionable.",
+      "if": {
+        "properties": {
+          "results": {
+            "contains": {
+              "properties": {
+                "outcome": {
+                  "const": "not_checkable"
+                },
+                "reason": {
+                  "const": null
+                }
+              },
+              "required": [
+                "outcome",
+                "reason"
+              ]
+            }
+          }
+        },
+        "required": [
+          "results"
+        ]
+      },
+      "then": {
+        "not": {}
+      }
+    }
+  ]
+}
