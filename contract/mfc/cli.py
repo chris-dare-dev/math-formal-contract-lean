@@ -33,6 +33,8 @@ from .conformance import evidence_table, gather
 from .digest import file_digest
 from .freshness import DEFAULT_MAX_AGE_DAYS, FreshnessError
 from .freshness import check as freshness_check
+from .withdrawals import WithdrawalsError
+from .withdrawals import check as withdrawals_check
 from .env import EnvError
 from .env import build as env_build
 from .ilean import DEFAULT_BUILD_DIR, IleanError
@@ -493,7 +495,8 @@ def cmd_conformance(args: argparse.Namespace) -> int:
 
 def cmd_join(args: argparse.Namespace) -> int:
     paths = {"declarations": Path(args.declarations)}
-    for name in ("review", "resolution", "registry", "environment"):
+    for name in ("review", "resolution", "registry", "environment",
+                 "withdrawals"):
         if getattr(args, name):
             paths[name] = Path(getattr(args, name))
     for label, p in paths.items():
@@ -516,7 +519,8 @@ def cmd_join(args: argparse.Namespace) -> int:
                            ("review", "review/1.0"),
                            ("resolution", "resolution/1.0"),
                            ("registry", "registry/1.0"),
-                           ("environment", "environment/1.0")):
+                           ("environment", "environment/1.0"),
+                           ("withdrawals", "withdrawals/1.0")):
         if label in docs:
             rc = _validate_against(docs[label], version, paths[label].name)
             if rc is not None:
@@ -548,6 +552,7 @@ def cmd_join(args: argparse.Namespace) -> int:
         print(f"\nwrote {out} -- {lanes or 'every entry is cited; no lanes'}")
 
     rows = claim_table(docs["declarations"], review=docs.get("review"),
+                       withdrawals=docs.get("withdrawals"),
                        resolution=docs.get("resolution"),
                        environment=docs.get("environment"))
     if "review" in docs and "environment" not in docs:
@@ -897,6 +902,36 @@ def cmd_check_resolution(args: argparse.Namespace) -> int:
     return _report(results, args.require_all)
 
 
+def cmd_withdrawals_check(args: argparse.Namespace) -> int:
+    path = Path(args.withdrawals)
+    if not path.is_file():
+        print(f"error: no such withdrawals file: {path}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        document = load_artifact(path)
+        registry = load_artifact(Path(args.registry)) if args.registry else None
+        previous = load_artifact(Path(args.previous)) if args.previous else None
+    except (LoadError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _validate_against(document, "withdrawals/1.0", path.name)
+    if rc is not None:
+        return rc
+
+    try:
+        results = withdrawals_check(document, registry=registry, previous=previous)
+    except WithdrawalsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    rc = _report(results, args.require_all)
+    n = len(document.get("withdrawals") or [])
+    print(f"\n{path.name}: {n} withdrawal(s). This file may be read from a "
+          f"NEWER tag than the one a consumer pins -- it is the only artifact "
+          f"that may, because it can only remove trust.")
+    return rc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfc",
@@ -995,6 +1030,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     joi.add_argument("--declarations", required=True, help="path to declarations.json")
     joi.add_argument("--review", help="path to review.yaml/json; enables J-01..J-03")
+    joi.add_argument("--withdrawals",
+                     help="withdrawals.yaml; retracted keys are marked in the "
+                          "claim table and excluded from the reviewed count")
     joi.add_argument("--environment", help="path to environment.json; without it "
                                            "no review verdict can be shown to be "
                                            "about this build, so the review "
@@ -1104,6 +1142,20 @@ def build_parser() -> argparse.ArgumentParser:
     res.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     res.set_defaults(func=cmd_check_resolution)
+
+    wd = sub.add_parser(
+        "check-withdrawals",
+        help="the W-01..W-04 rules over withdrawals.yaml",
+        description="A published record that a human determined is not "
+                    "faithful must be retractable. This file is append-only "
+                    "and may travel forward in time, because it can only "
+                    "remove trust and never grant it.")
+    wd.add_argument("withdrawals")
+    wd.add_argument("--registry", help="enables W-02 and W-03")
+    wd.add_argument("--previous", help="an earlier revision of this file; "
+                                       "enables the append-only check W-04")
+    wd.add_argument("--require-all", dest="require_all", action="store_true")
+    wd.set_defaults(func=cmd_withdrawals_check)
 
     reg = sub.add_parser(
         "registry",

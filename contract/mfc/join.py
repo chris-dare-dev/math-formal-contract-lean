@@ -59,6 +59,7 @@ from typing import Any, Iterable, NamedTuple
 from .registry import RegistryShapeError, kind_of, open_frontier
 from .registry import entries as registry_entries
 from .rules import Finding, RuleResult, Status
+from .withdrawals import withdrawn_keys
 
 #: The issue whose resolution unblocks `J-06`. Named in the `not_run` reason so
 #: a reader learns *what* is undecided rather than only that something is.
@@ -114,6 +115,11 @@ class Row(NamedTuple):
     resolution: str
     #: Frontier ids the author left open. Never merged into a verdict.
     frontier: str
+    #: True when a human has RETRACTED this record. It is not a verdict and it
+    #: does not replace one: every other column keeps whatever it said, because
+    #: a reader must be able to see WHAT was withdrawn, not merely that
+    #: something was. What it does is stop the row reading as live evidence.
+    withdrawn: bool = False
 
 
 def bindings(declarations: dict) -> list[Binding]:
@@ -290,6 +296,7 @@ def claim_table(
     review: dict | None = None,
     resolution: dict | None = None,
     environment: dict | None = None,
+    withdrawals: dict | None = None,
 ) -> list[Row]:
     """One row per citation binding, with each axis kept in its own column.
 
@@ -310,6 +317,11 @@ def claim_table(
         by_digest_key[(r.get("key"), r.get("reviewed_statement_digest"))] = r
     by_key = {r["key"]: r for r in (resolution or {}).get("results", [])}
     want = (environment or {}).get("env_digest")
+    # A withdrawal is a trust-REMOVING act, so an unreadable withdrawal list
+    # must not read as "nothing is withdrawn" -- `withdrawn_keys` raises rather
+    # than returning an empty set, and the caller reports that as a run that
+    # did not happen.
+    retracted = withdrawn_keys(withdrawals)
 
     def review_cells(rev: dict | None) -> tuple[str, str]:
         """`(faithfulness, relation_confirmed)` for one row, applicability first.
@@ -333,6 +345,7 @@ def claim_table(
             by_digest_key.get((b.key, b.statement_digest)))
         res = by_key.get(b.key)
         rows.append(Row(
+            withdrawn=b.key in retracted,
             key=b.key,
             decl=b.decl,
             claimed=b.relation_claimed,

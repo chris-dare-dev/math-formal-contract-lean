@@ -56,7 +56,7 @@ def _schema(name: str) -> dict:
 
 
 def test_every_schema_is_present() -> None:
-    """Ten.
+    """Eleven.
 
     `registry-1.0` joined the original seven once the accessor work showed the
     schema was fully specified in the design note and blocked on nothing — the
@@ -75,11 +75,17 @@ def test_every_schema_is_present() -> None:
     timestamp, the run URL, the runner — so that no field which changes per
     run lives in a file `git diff --exit-code attest/` compares. See #160 and
     `lint.VOLATILE_PROPERTY_NAMES`.
+
+    `withdrawals-1.0` is the eleventh, and it is the only artifact a consumer
+    may read from a NEWER tag than the one it pins. That is safe for exactly
+    one reason: a withdrawal can only remove trust, never grant it. Everything
+    else in the contract is pinned precisely so a consumer cannot be handed a
+    claim its pinned review never covered.
     """
     assert SCHEMAS == [
         "build-1.0", "bundle-1.0", "declarations-1.0", "emission-1.0",
         "environment-1.0", "registry-1.0", "resolution-1.0", "review-1.0",
-        "run-1.0", "workqueue-1.0",
+        "run-1.0", "withdrawals-1.0", "workqueue-1.0",
     ]
 
 
