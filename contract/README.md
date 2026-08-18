@@ -23,11 +23,13 @@ to serve this directory, the named exception in the consuming repo's
 
 | path | what |
 |---|---|
-| `mfc/schema/*.schema.json` | **all ten** artifact formats |
+| `mfc/schema/*.schema.json` | **all twelve** artifact formats |
 | `mfc/digest.py` | the four canonical digest functions — **frozen** |
 | `mfc/lint.py` | the banned-property lint, and the volatile-property lint |
 | `mfc/validate.py` | artifact validation |
 | `mfc/bundle.py` | `declarations.json`, everything recomputed |
+| `mfc/build.py` | `build/1.0` from lake's NDJSON — the sorry count comes from `kind`, never the exit code |
+| `mfc/seal.py` | `bundle/1.0`, the in-toto Statement `conformance` reads |
 | `mfc/rules.py` | the E-01..E-10 content rules |
 | `mfc/bootstrap.py` | the write-once `bootstrap` flag — how a repo with nothing in it yet reaches a first green build |
 | `mfc/conformance.py` | the C-01..C-12 cross-artifact rules |
@@ -37,7 +39,7 @@ to serve this directory, the named exception in the consuming repo's
 | `mfc/rules_registry.py` | the R-01..R-09 registry rules |
 | `mfc/scaffold.py` | `mfc init` — the topic-repo templates |
 | `mfc/env.py` | `mfc env` — reads a topic checkout, writes `environment/1.0` |
-| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `lint`, `conformance`, `join`, `env`, `check-ilean-coverage`, `init`, `registry` |
+| `mfc/cli.py` | `mfc lint-schemas`, `validate`, `bundle`, `build`, `lint`, `conformance`, `seal`, `join`, `env`, `check-ilean-coverage`, `init`, `registry` |
 | `pyproject.toml` | packaging, so a consumer can install it |
 | `testdata/schemas/invalid/` | schemas that must fail the lint |
 | `testdata/artifacts/valid/` | one filled instance per schema |
@@ -301,6 +303,37 @@ repo's own CI cannot produce a real environment record for itself, and its use
 of the fixture is a test of the emitter rather than a trust record. Read it that
 way.
 
+## `build`: the exit code is not the measurement
+
+`lake env lean --json` on a file whose only defect is a `sorry` **exits 0**.
+Measured on `leanprover/lean4:v4.32.1`, the pinned toolchain:
+
+```
+{"kind":"hasSorry","severity":"warning","data":"declaration uses `sorry`",...}
+EXIT=0
+```
+
+So `lake_build_exit` is recorded and never consulted, and the gate is
+`sorry_diagnostic_count`, counted from records whose `kind` is `hasSorry`. This
+is the emitter's "never parse the source" discipline one level down: in the
+build log rather than in the declaration.
+
+Counting by `kind` has one silent failure mode — a toolchain that renames or
+drops the tag turns every sorry into an uncounted warning and the count reads
+`0`. A diagnostic whose *text* reads like a sorry while its `kind` says
+otherwise is therefore a **hard failure**. The text is a tripwire and never the
+counter: counting from prose would break the moment Lean rewords the message,
+which is why the `kind` field exists at all.
+
+A line that is not a JSON object raises rather than being skipped. A diagnostic
+that could not be parsed is a diagnostic that would not be counted, and an
+undercount is indistinguishable from a clean build — so lake's human-readable
+progress output on the same handle is reported as the caller error it is.
+
+`independent_checkers` is an input, not an observation, for the same reason
+`axiom_policy` is: this package cannot know what else was run. An empty array
+reads as "none was run", which is different from the field being absent.
+
 ## `conformance`: seven valid artifacts that do not describe the same thing
 
 `validate` asks whether one artifact is well formed. `lint` asks whether one
@@ -365,14 +398,21 @@ predicate(s)". `C-12` is the only rule that can see an absence, and
 `test_c12_a_bundle_that_simply_omits_its_build_predicate` asserts that no other
 rule notices — which is why it exists.
 
-### Not yet in this repo's CI, and why that is stated rather than faked
+### What used to be missing, and what still is
 
-CI here produces an emission and a `declarations.json`. Nothing assembles a
-`bundle.json`, and there is no `environment.json` or `build.json`, so there is
-nothing for `conformance` to run against. A CI step pointed at a file no step
-produces would fail for the wrong reason; a step that tolerated its absence
-would be the vacuous pass. It runs in pytest against a generated coherent tree
-until a bundle exists.
+This section previously read "nothing assembles a `bundle.json`, and there is
+no `environment.json` or `build.json`, so there is nothing for `conformance` to
+run against." Two of those three are now produced: `mfc env` writes the
+environment record, and `mfc build` and `mfc seal` write the other two. The
+consuming repository's CI produces `environment.json` and `declarations.json`
+today, and `test_conformance_passes_over_a_sealed_bundle` runs all twelve rules
+over a bundle this package actually wrote rather than one a test assembled.
+
+What is still absent is stated the same way rather than worked around.
+`review.yaml` has no producer and must not have one — it is the axis no machine
+may write. `resolution.json` is arXMCP's, and until it exists `C-08` and `C-10`
+report `not_run`, which is **not** a pass: the summary line says so on every
+run.
 
 ### The fixture tree is built, not checked in
 
@@ -391,6 +431,41 @@ with the real digest left in place. Rebuilt truthfully from the consuming
 repo's `lake-manifest.json`, which also makes `digest.py`'s "nine of the
 fourteen packages carry `inputRev` `main` or `master`" checkable against the
 fixture instead of only asserted in prose.
+
+## `seal`: the producer `conformance` was waiting for
+
+Twelve rules, and until now nothing wrote the file they read. `mfc seal`
+assembles `bundle/1.0` — an in-toto Statement v1 with one subject and N
+predicates, and deliberately **no** SLSA `verificationResult`, which is exactly
+the single collapsed trust token the design forbids.
+
+### It cannot write the `C-12` fixture
+
+`C-12` exists because every other rule checks what is *present*: a bundle that
+omits its `build/v1` predicate satisfies all eleven others and reports "5
+predicate(s)". A producer willing to write that bundle would be shipping the
+rejection fixture as a product, so `seal` refuses when a required predicate
+type is missing — and there is no `--force`. The producer and the checker
+import `REQUIRED_PREDICATE_TYPES` from the same module, so the two lists cannot
+drift.
+
+### A dirty worktree is refused
+
+The subject attests a `gitCommit`. If the tree carries uncommitted changes, the
+measurements describe bytes that commit does not contain, and every digest in
+the bundle becomes a true statement about a tree nobody can fetch.
+`--allow-dirty` exists for local experimentation and says on stderr that the
+result is explicitly not a release.
+
+### `self_attested`, said rather than implied
+
+`true` means the party that wrote the code also produced the measurement. For a
+solo-operated repository that is the honest label on `environment`,
+`declarations` and `build`, and stating it is worth more than the appearance of
+independence. Human review and the corpus resolution are produced elsewhere and
+carry `false`. The corpus resolution also carries `env_digest: null` — not a
+mismatch and not a match, because it is not produced in a Lean environment at
+all.
 
 ## `join`: three axes, three columns, no fourth column
 

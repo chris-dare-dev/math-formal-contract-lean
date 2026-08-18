@@ -29,10 +29,12 @@ without a second set of defensive branches.
 
 ## Scope
 
-This produces `declarations.json`. `environment.json` (which needs
-`lake-manifest.json`), `build.json` (which needs the `lake env lean --json`
-NDJSON) and `bundle.json` (which needs file digests over the finished set) are
-separate inputs and are not built here yet.
+This produces `declarations.json` and nothing else. The three artifacts it
+used to name as unbuilt now have producers of their own, each reading a
+different source: `environment.json` from the checkout (`env.py`), `build.json`
+from the `lake env lean --json` NDJSON (`build.py`), and `bundle.json` from
+file digests over the finished set (`seal.py`). They stay separate modules
+because they share no input with this one.
 """
 
 from __future__ import annotations
