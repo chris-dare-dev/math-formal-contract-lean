@@ -61,7 +61,7 @@ def _emission(constants: list[dict], modules: list[str]) -> dict:
     base["counts"] = {
         "total": len(constants), "in_scope": len(topic), "internal": 0,
         "with_range": 0, "instances": 0, "private": 0,
-        "external": len(constants) - len(topic)}
+        "external": len(constants) - len(topic), "foreign": 0}
     return base
 
 

@@ -47,7 +47,8 @@ def _emission(constants: list[dict], *, root_lib: str = ROOT,
                        else sorted({c["module"] for c in constants}))
     n = len(constants)
     base["counts"] = {"total": n, "in_scope": n, "internal": 0,
-                      "with_range": 0, "instances": 0, "private": 0, "external": 0}
+                      "with_range": 0, "instances": 0, "private": 0, "external": 0,
+                      "foreign": 0}
     return base
 
 
