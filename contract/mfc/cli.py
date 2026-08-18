@@ -34,6 +34,7 @@ from .digest import file_digest
 from .env import EnvError
 from .env import build as env_build
 from .ilean import DEFAULT_BUILD_DIR, IleanError
+from .ilean import allowlist as ilean_allowlist
 from .ilean import check as ilean_check
 from .ilean import coverage as ilean_coverage
 from .ilean import load_modules
@@ -672,7 +673,31 @@ def cmd_check_ilean_coverage(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
+    # I-06 rides here rather than in `mfc lint` because its evidence is the
+    # `.ilean` tree, not the emission -- the same reason every other I-rule is
+    # in this command. `E-09`'s denylist and this allowlist are deliberately
+    # both live: they answer different questions (§4 "did you import geometry"
+    # versus §3 "are you building on anything you did not declare"), and a
+    # repository that configures only one gets exactly one of them.
+    permitted = None
+    if args.closed_lanes:
+        try:
+            lanes_doc = load_artifact(Path(args.closed_lanes))
+        except (LoadError, OSError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_USAGE
+        if isinstance(lanes_doc, dict):
+            raw = lanes_doc.get("permitted_module_prefixes")
+            if raw is not None and (not isinstance(raw, list)
+                                    or not all(isinstance(x, str) for x in raw)):
+                print("error: permitted_module_prefixes must be an array of "
+                      "strings", file=sys.stderr)
+                return EXIT_USAGE
+            permitted = raw
+
     results = ilean_check(emission, modules, lib=args.lib)
+    results.append(ilean_allowlist(
+        modules, permitted, root=args.lib or emission.get("root_lib") or ""))
     rc = _report(results, args.require_all)
 
     c = ilean_coverage(emission, modules, lib=args.lib)
@@ -933,6 +958,8 @@ def build_parser() -> argparse.ArgumentParser:
                     "that does not come from the emitter.",
     )
     cov.add_argument("--emission", required=True, help="path to lean-emission.json")
+    cov.add_argument("--closed-lanes", dest="closed_lanes",
+                     help="JSON carrying permitted_module_prefixes[]; enables I-06")
     cov.add_argument("--build-dir", dest="build_dir",
                      help=f"where lake writes .ilean (default: {DEFAULT_BUILD_DIR})")
     cov.add_argument("--lib", help="root library module name; overrides the "

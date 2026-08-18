@@ -127,6 +127,7 @@
         "num_levels",
         "type_pp",
         "value_pp",
+        "doc",
         "local_deps",
         "scc_members",
         "axioms",
@@ -179,6 +180,13 @@
             "string",
             "null"
           ]
+        },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "$comment": "The declaration's doc-comment, verbatim, or null when it has none. Evidence for CLAUDE.md section 3, not documentation for a reader: section 4's hazard is IMPORTING geometry, which I-06 reads off the imports, while section 3's hazard is CLAIMING geometry you do not have -- and `abbrev NumLattice : Type := Fin 2 -> Z` imports nothing, so the false claim lives entirely in a doc-comment. null is distinct from \"\", which is an empty doc-comment someone wrote."
         },
         "local_deps": {
           "type": "array",

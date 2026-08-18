@@ -35,6 +35,7 @@ FIXTURES = {
     "empty-emission": "E-08",
     "closed-lane-breach": "E-09",
     "unsorted-axioms": "E-10",
+    "vocabulary-overclaim": "E-11",
 }
 
 

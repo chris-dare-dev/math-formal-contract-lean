@@ -53,6 +53,7 @@ RULE_TITLES: tuple[tuple[str, str], ...] = (
     ("E-08", "the emission is not vacuous"),
     ("E-09", "no declaration reaches into a closed lane"),
     ("E-10", "axioms and local_deps are sorted ascending"),
+    ("E-11", "no unfinished declaration claims forbidden vocabulary"),
 )
 
 
@@ -276,6 +277,61 @@ def check(
             if not _sorted_ascending(c[field]):
                 e10.append(Finding("E-10", c["name"], f"{field} is not sorted ascending"))
     add("E-10", "axioms and local_deps are sorted ascending", e10)
+
+    # E-11 -- CLAUDE.md section 3, mechanised.
+    #
+    # E-09 catches section 4: a declaration that REACHES INTO a closed lane, by
+    # module prefix or by constant. Section 3 is the other failure and nothing
+    # caught it:
+    #
+    #     abbrev NumLattice : Type := Fin 2 -> Z
+    #
+    # imports nothing forbidden, reaches no closed lane, and passes E-01..E-10.
+    # A doc-comment calling it the numerical Grothendieck group of a Kuznetsov
+    # component is the entire claim, and until the emitter carried `doc` there
+    # was no artifact in which that text appeared.
+    #
+    # SCOPED TO DECLARATIONS WITH AN OPEN FRONTIER, which is what makes this a
+    # rule about overclaiming rather than a banned-words list. A declaration
+    # that genuinely has Chern classes and cites a statement with no open
+    # frontier may say so. The one that says so while ALSO recording that the
+    # supporting work is unfinished is the one making a claim it cannot back,
+    # and that pairing -- vocabulary plus open frontier -- is the finding.
+    #
+    # Names AND doc-comments, per the issue. `type_pp` is deliberately not
+    # linted: a type mentioning a Mathlib name it genuinely uses is not a
+    # claim, and E-09's `forbidden_constants` already reads it.
+    lanes_with_vocab = [] if closed_lanes is None else [
+        lane for lane in closed_lanes if lane.get("forbidden_vocabulary")]
+    if closed_lanes is None:
+        results.append(RuleResult(
+            "E-11", "no unfinished declaration claims forbidden vocabulary",
+            Status.NOT_RUN,
+            reason="no closed_lanes configuration supplied (--closed-lanes)"))
+    elif not lanes_with_vocab:
+        results.append(RuleResult(
+            "E-11", "no unfinished declaration claims forbidden vocabulary",
+            Status.NOT_RUN,
+            reason="no lane declares forbidden_vocabulary[]; section 3 is not "
+                   "mechanised for this topic, only asserted"))
+    else:
+        e11: list[Finding] = []
+        for c in constants:
+            if not any(cite["frontier"] for cite in c["cites"]):
+                continue
+            haystacks = [("name", c["name"])]
+            if c.get("doc"):
+                haystacks.append(("doc-comment", c["doc"]))
+            for lane in lanes_with_vocab:
+                for word in lane["forbidden_vocabulary"]:
+                    for where, text in haystacks:
+                        if word.casefold() in text.casefold():
+                            e11.append(Finding(
+                                "E-11", c["name"],
+                                f"{where} claims {word!r}, closed by lane "
+                                f"{lane['name']!r}, while its own citation "
+                                f"records an open frontier"))
+        add("E-11", "no unfinished declaration claims forbidden vocabulary", e11)
 
     return results
 

@@ -32,7 +32,7 @@ def _constant(name: str, module: str) -> dict:
         "name": name, "module": module, "kind": "theorem",
         "is_instance": False, "is_internal": False, "is_private": False,
         "is_reducible": False, "num_levels": 0,
-        "type_pp": "True", "value_pp": None,
+        "type_pp": "True", "value_pp": None, "doc": None,
         "local_deps": [], "scc_members": [], "axioms": [],
         "range": None, "cites": [],
     }

@@ -286,6 +286,12 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
         withOptions (fun _ => ppOpts) do
           pure (some (toString (← PrettyPrinter.ppExpr v.value)))
       | _ => pure none
+    -- Read from the environment, like everything else here. `findDocString?`
+    -- reads the doc-string extension rather than the source file, so a
+    -- doc-comment cannot be hidden from this by any syntactic trick -- the
+    -- same property that makes the constant sweep immune to
+    -- `set_option ... in theorem`.
+    let docStr ← findDocString? env n
     let deps := match ci with
       | .defnInfo v | .opaqueInfo v =>
         sortedNames (localConstsIn env mods ci.type ++ localConstsIn env mods v.value)
@@ -302,6 +308,20 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
       ("num_levels",   Json.num ci.levelParams.length),
       ("type_pp",      Json.str tyStr),
       ("value_pp",     match valStr with | some s => Json.str s | none => Json.null),
+      -- The doc-comment, VERBATIM, and it is the evidence for `CLAUDE.md`
+      -- section 3 rather than documentation for a reader.
+      --
+      -- Section 4's hazard is IMPORTING geometry, and `I-06` reads that off
+      -- the imports. Section 3's hazard is CLAIMING geometry you do not have,
+      -- and `abbrev NumLattice : Type := Fin 2 -> Z` imports nothing at all:
+      -- the false claim lives entirely in a doc-comment calling it a numerical
+      -- Grothendieck group of a Kuznetsov component. No artifact carried that
+      -- text before this, so no check could see the one place the claim is
+      -- made.
+      --
+      -- `null` when the declaration has no doc-string, distinct from `""`,
+      -- which is an empty doc-comment someone actually wrote.
+      ("doc",          match docStr with | some s => Json.str s | none => Json.null),
       ("local_deps",   Json.arr (deps.map fun d => Json.str d.toString)),
       -- Mutual-recursion groups are not yet computed; the key is present and
       -- empty rather than absent, so a consumer never has to distinguish
