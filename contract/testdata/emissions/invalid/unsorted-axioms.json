@@ -35,6 +35,7 @@
       "doc": null,
       "type_pp": "Nat",
       "scc_members": [],
+      "discharges": [],
       "range": {
         "startLine": 112,
         "startCol": 0,
@@ -69,6 +70,7 @@
       "doc": null,
       "type_pp": "True",
       "scc_members": [],
+      "discharges": [],
       "range": {
         "startLine": 92,
         "startCol": 0,

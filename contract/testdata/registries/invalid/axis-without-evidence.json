@@ -41,7 +41,8 @@
             "key": "stmt:9f4c1a20b7d3:never-minted",
             "discharged_at": "2026-08-05",
             "discharged_by_reviewer": "Chris Dare",
-            "note": "Every field here is well formed and the date and reviewer are real. The only thing wrong is that the key names nothing -- which is the entire point: this is an axis moving from open to closed on evidence that does not exist."
+            "note": "Every field here is well formed and the date and reviewer are real. The only thing wrong is that the key names nothing -- which is the entire point: this is an axis moving from open to closed on evidence that does not exist.",
+            "declaration": "Topic.Lattice.someProof"
           }
         }
       ],

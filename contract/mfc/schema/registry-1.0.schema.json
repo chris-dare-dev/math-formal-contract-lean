@@ -224,11 +224,17 @@
               "required": [
                 "key",
                 "discharged_at",
-                "discharged_by_reviewer"
+                "discharged_by_reviewer",
+                "declaration"
               ],
               "properties": {
                 "key": {
                   "$ref": "#/$defs/citationKey"
+                },
+                "declaration": {
+                  "type": "string",
+                  "minLength": 1,
+                  "$comment": "The Lean declaration that discharges this item, and it must carry `@[discharges \"<this item's id>\"]` in the emission -- `mfc lint` E-12. Without it axis 6 was hand-edited YAML that mfc only aggregated: nothing checked the named discharger proves anything, so a discharge that existed only in prose was indistinguishable from a real one. This does not verify the mathematics; it removes the weaker failure."
                 },
                 "discharged_at": {
                   "$ref": "#/$defs/isoDate"
