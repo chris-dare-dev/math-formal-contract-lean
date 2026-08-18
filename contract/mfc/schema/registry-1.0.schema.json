@@ -418,7 +418,16 @@
           "enum": [
             "verbatim",
             "digest_only"
-          ]
+          ],
+          "$comment": "REQUIRED FROM V1 (owner decision, 2026-08-18, Q5/#163), so the two grounding strengths are always distinguishable in the served record rather than inferred from whether a quote happens to be present. `verbatim` is the DEFAULT FOR ARXIV SOURCES: Bridgeland 2007 is arXiv perpetual-non-exclusive, and inlining is what lets a topic repo recompute its own hash with arXMCP deleted from the machine. `digest_only` exists for sources whose licence does not permit inlining, and it costs real capability -- offline verification is gone, and resolution degrades to `printed_number`, which is exactly the field most likely to be ABSENT: `_extract_printed_number` lives only in the ar5iv/LaTeXML chunker, it is 36 of 66 chunks even on the flagship paper, and the textbook and MinerU paths never populate it. Choosing it against a source that permits verbatim is therefore a deliberate downgrade and must say why -- see quote_mode_reason."
+        },
+        "quote_mode_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "$comment": "Why this entry is not verbatim. Mandatory when `digest_only` is chosen for an ARXIV source, because that is the case where verbatim was available and was declined; a licence that forbids inlining is not a choice and needs no justification, so textbook and other schemes are not asked for one. This is how 'verbatim is the default' is enforced on a REQUIRED field: a required field has no unspecified case, so the default is expressed as what deviating from it costs."
         },
         "quote": {
           "type": [
@@ -623,6 +632,51 @@
             "required": [
               "mint_unresolved_reason"
             ]
+          }
+        },
+        {
+          "$comment": "Q5/#163: digest_only on an arXiv source is a deliberate downgrade and carries a stated reason. An OBLIGATION is exempt, and the exemption is the rule working rather than a hole in it: an obligation is work that is owed, with no statement minted yet, so it is not declining verbatim -- it has nothing to inline. R-13 is the backstop.",
+          "if": {
+            "properties": {
+              "quote_mode": {
+                "const": "digest_only"
+              },
+              "source": {
+                "properties": {
+                  "scheme": {
+                    "const": "arxiv"
+                  }
+                },
+                "required": [
+                  "scheme"
+                ]
+              }
+            },
+            "required": [
+              "quote_mode",
+              "source"
+            ],
+            "not": {
+              "properties": {
+                "kind": {
+                  "const": "obligation"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            }
+          },
+          "then": {
+            "required": [
+              "quote_mode_reason"
+            ],
+            "properties": {
+              "quote_mode_reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           }
         }
       ]
