@@ -1,0 +1,57 @@
+{
+  "$comment": "Rotation classes, as DATA. Each says what a real corpus change does to the quote digest and to containment. The design claimed the digest survives 'a chunker bump, an ar5iv re-render, a LaTeXML upgrade, an HTML-to-MinerU migration'; these record that only the preamble and whitespace classes actually do, which is why the quote_containment rung exists. See #162 / red team gap 11.",
+  "cases": [
+    {
+      "id": "preamble-recovered",
+      "class": "preamble",
+      "why": "An ingest that recovers preamble text and leaves body_text alone -- `ingest-recover-preambles`. The body is untouched, so the digest is untouched. This is the ONE class the design's claim was true of.",
+      "quote": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "body_before": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "body_after": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "preamble_before": "",
+      "preamble_after": "Definition 5.1. ",
+      "digest_survives": true,
+      "containment_survives": true
+    },
+    {
+      "id": "rewrapped",
+      "class": "whitespace",
+      "why": "A re-render that changes only wrapping. Absorbed by nfc-ws-collapse/1 BY CONSTRUCTION -- which is why a test built on this perturbation proves the normalization works and nothing about re-chunking.",
+      "quote": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "body_before": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "body_after": "A\n  stability\n  condition\n  on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "digest_survives": true,
+      "containment_survives": true
+    },
+    {
+      "id": "chunks-merged",
+      "class": "rechunk-merge",
+      "why": "A chunker bump that merges this statement's chunk with the following one. body_text changes, so the digest changes EXACTLY AS chunk_id does -- and the statement is still there, which only containment can see.",
+      "quote": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "body_before": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "body_after": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t. Lemma 5.2. The set of stability conditions on D has a natural topology.",
+      "digest_survives": false,
+      "containment_survives": true
+    },
+    {
+      "id": "chunk-split-around",
+      "class": "rechunk-split",
+      "why": "A chunker bump that splits a larger chunk, leaving this statement whole inside the new one. Same story: digest gone, statement present.",
+      "quote": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "body_before": "Definition 5.1. A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t. These data are required to satisfy the following axioms, which we state in full below.",
+      "body_after": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t. These data are required to satisfy the following axioms, which we state in full below.",
+      "digest_survives": false,
+      "containment_survives": true
+    },
+    {
+      "id": "chunk-split-through",
+      "class": "rechunk-split-through",
+      "why": "The honest limit of containment: a split that cuts THROUGH the statement leaves neither half containing it. Nothing recovers this, and the resolver must say `unresolvable` rather than reach for a similarity score.",
+      "quote": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "body_before": "A stability condition on a triangulated category D consists of a group homomorphism Z from K(D) to C together with full additive subcategories P(t) for each real number t.",
+      "body_after": "A stability condition on a triangulated category D consists of a group homomorphism Z",
+      "digest_survives": false,
+      "containment_survives": false
+    }
+  ]
+}
