@@ -42,6 +42,8 @@ from .join import check as join_check
 from .join import claim_table, coverage, workqueue
 from .registry import RegistryShapeError
 from .rules_registry import check as registry_check
+from .rules_registry import external_decls as registry_external_decls
+from .rules_registry import interface_ratio
 from .rules_registry import mint_registry_id
 from .scaffold import (
     NEXT_STEPS,
@@ -805,7 +807,58 @@ def cmd_registry_validate(args: argparse.Namespace) -> int:
     # entries is not a count of formalizable work.
     print(f"\n{path.name}: " +
           (", ".join(f"{k}: {n}" for k, n in sorted(kinds.items())) or "no entries"))
+
+    # Reported, never thresholded, and never folded into the rule table: there
+    # is no fraction of interfaces that is *wrong*, but a registry that is
+    # nine-tenths interfaces relates almost nothing to anything outside this
+    # repository, and that fact should not require reading the file to notice.
+    interfaces, frontier_total = interface_ratio(entries)
+    if frontier_total:
+        pct = 100.0 * interfaces / frontier_total
+        print(f"{path.name}: interface_ratio {interfaces}/{frontier_total} "
+              f"({pct:.0f}%) of frontier items model something outside this "
+              f"repo only by claim")
     return rc
+
+
+def cmd_registry_external_decls(args: argparse.Namespace) -> int:
+    """Write the emitter's `--externals` input: a plain JSON array of names.
+
+    Deliberately a separate command rather than a flag on the emitter. The
+    emitter is Lean, the registry is YAML-or-JSON, and teaching a Lean binary
+    to parse a hand-authored registry would put a second reader of the contract
+    in a second language -- which is the drift this package exists to avoid.
+    `mfc` reads the registry, the emitter reads a list of strings.
+    """
+    path = Path(args.registry)
+    if not path.is_file():
+        print(f"error: no such registry: {path}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        document = load_artifact(path)
+    except (LoadError, OSError) as exc:
+        print(f"error: {path.name}: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _validate_against(document, "registry/1.0", path.name)
+    if rc is not None:
+        return rc
+
+    bindings = registry_external_decls(document.get("entries") or {})
+    names = [b["name"] for b in bindings]
+    payload = json.dumps(names, indent=2, sort_keys=False) + "\n"
+    if args.out:
+        out = Path(args.out)
+        if out.parent and not out.parent.is_dir():
+            out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        print(f"ok: wrote {out} -- {len(names)} external binding(s)")
+    else:
+        print(payload, end="")
+    for binding in bindings:
+        print(f"  {binding['name']}  <- {', '.join(binding['cited_by'])}",
+              file=sys.stderr)
+    return EXIT_OK
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1012,6 +1065,17 @@ def build_parser() -> argparse.ArgumentParser:
     reg_init = regsub.add_parser(
         "init", help="mint a 12-hex registry id (once per repository)")
     reg_init.set_defaults(func=cmd_registry_init)
+
+    reg_ext = regsub.add_parser(
+        "external-decls",
+        help="write the emitter's --externals list from the registry",
+        description="Constants already in Mathlib or the anchor that entries "
+                    "bind to directly. The emitter sweeps them with "
+                    "scope: external, so a topic never has to restate an "
+                    "upstream theorem and then attest to the wrapper.")
+    reg_ext.add_argument("registry")
+    reg_ext.add_argument("--out", help="destination (default: stdout)")
+    reg_ext.set_defaults(func=cmd_registry_external_decls)
 
     reg_val = regsub.add_parser(
         "validate", help="schema plus the R-01..R-09 content rules")

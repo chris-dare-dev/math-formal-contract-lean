@@ -26,7 +26,8 @@
     "internal": 0,
     "with_range": 1,
     "instances": 0,
-    "private": 0
+    "private": 0,
+    "external": 0
   },
   "constants": [
     {
@@ -43,6 +44,7 @@
       "num_levels": 0,
       "name": "Topic.Lattice.NumLattice",
       "module": "Topic.Lattice",
+      "scope": "topic",
       "local_deps": [],
       "kind": "def",
       "is_reducible": false,

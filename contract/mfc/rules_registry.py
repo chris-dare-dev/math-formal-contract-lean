@@ -203,7 +203,122 @@ def check(
          if e.get("kind") == "obligation" and e.get("quote_sha256") is None
          and not (e.get("note") or "").strip()])
 
+    # R-10 -- an interface either points at something real or says it points at
+    # nothing.
+    #
+    # At near-zero Mathlib coverage the whole repo is self-declared interface
+    # structures. `closed_lanes` forbids nothing useful because there is
+    # nothing in Mathlib to forbid; every entry is `one_way` or `no_claim` with
+    # a frontier of hand-written `interface` items; and `statement_digest` then
+    # faithfully detects drift IN A PRIVATE FICTION while axes 1-4 and 6 all
+    # pass, greenly, about a repository that has formalised nothing anyone else
+    # would recognise.
+    #
+    # Bridgeland hides this, which is why nobody noticed: its upstream anchor
+    # supplies real `Slicing` and `PreStabilityCondition` definitions, so
+    # `relation_claimed` has something external to relate to. Remove the anchor
+    # and the only remaining defence is human review -- the one resource #166
+    # already exhausts.
+    #
+    # A backstop, like R-01 and R-06: the schema's `allOf` rejects both shapes
+    # before this runs, and this exists for a caller reaching `check()`
+    # directly. `no_referent: true` is a legitimate answer for genuinely novel
+    # mathematics; what is not legitimate is leaving the field empty and
+    # letting a reader assume it was considered.
+    r10: list[Finding] = []
+    for key, e in sorted(entries.items()):
+        for item in e.get("frontier") or []:
+            if not isinstance(item, dict) or item.get("kind_class") != "interface":
+                continue
+            named = isinstance(item.get("referent"), str) and item["referent"].strip()
+            admitted = item.get("no_referent") is True
+            note = (item.get("referent_note") or "").strip()
+            if not named and not admitted:
+                r10.append(Finding(
+                    "R-10", key,
+                    f"frontier {item.get('id')!r} is kind_class=interface and "
+                    f"names no referent; an interface that models nothing "
+                    f"external must say so with no_referent: true"))
+            elif admitted and not note:
+                r10.append(Finding(
+                    "R-10", key,
+                    f"frontier {item.get('id')!r} sets no_referent: true with "
+                    f"no referent_note; an admission with no reason is the "
+                    f"empty field again"))
+    add("R-10", "every interface frontier item names a referent or admits none",
+        r10)
+
+    # R-11 -- an external binding names an environment, and the one it names is
+    # the one this registry was minted against.
+    #
+    # A constant NAME alone does not identify a statement. Mathlib restates and
+    # generalises constantly, so `Nat.succ_le_of_lt` at one rev and the same
+    # name six months later can be different theorems with the same spelling --
+    # and a binding that did not say which rev it meant would silently follow
+    # whichever one is current. That is precisely the failure `env_digest`
+    # exists to stop everywhere else in this contract.
+    #
+    # The schema already requires the field and its shape. This checks the
+    # thing the schema cannot: that every binding agrees with every other, so a
+    # registry cannot half-migrate across a Mathlib bump and read as coherent.
+    digests = {b["env_digest"] for b in external_decls(entries) if b.get("env_digest")}
+    r11: list[Finding] = []
+    if len(digests) > 1:
+        for key, e in sorted(entries.items()):
+            for b in e.get("external_decls") or []:
+                if isinstance(b, dict) and b.get("env_digest"):
+                    r11.append(Finding(
+                        "R-11", key,
+                        f"external binding {b.get('name')!r} pins env_digest "
+                        f"{b['env_digest'][:12]}…, and this registry uses "
+                        f"{len(digests)} different environments across its "
+                        f"external bindings; they cannot all be current"))
+    add("R-11", "all external bindings pin one environment", r11)
+
     return results
+
+
+def external_decls(entries: dict) -> list[dict]:
+    """Every `external_decls[]` binding in the registry, sorted by name.
+
+    This is what `mfc registry external-decls` writes and the emitter's
+    `--externals` reads. It is a FILE rather than a flag list because the names
+    come from the registry and a shell-quoted Lean name is a place for a
+    component to go missing silently.
+    """
+    out: dict[str, dict] = {}
+    for key, entry in sorted(entries.items()):
+        for binding in entry.get("external_decls") or []:
+            if not isinstance(binding, dict) or not binding.get("name"):
+                continue
+            out.setdefault(binding["name"], {**binding, "cited_by": []})
+            out[binding["name"]]["cited_by"].append(key)
+    return [out[name] for name in sorted(out)]
+
+
+def interface_ratio(entries: dict) -> tuple[int, int]:
+    """`(interface items, total frontier items)` across the registry.
+
+    Reported, never thresholded. There is no number of interfaces that is
+    wrong: a young topic at low Mathlib coverage is *supposed* to be mostly
+    interfaces, and a rule that failed above some fraction would be inventing
+    a policy the contract has no basis for. What it must not do is stay
+    invisible -- "9 of 10 frontier items are interfaces" is the single figure
+    that tells a reader how much of this registry relates to anything outside
+    the repository.
+
+    The consumer-side `caveats[]` block this feeds is arXMCP's
+    (`arxmcp://formal/*`), and is out of this repository entirely.
+    """
+    total = interfaces = 0
+    for e in entries.values():
+        for item in e.get("frontier") or []:
+            if not isinstance(item, dict):
+                continue
+            total += 1
+            if item.get("kind_class") == "interface":
+                interfaces += 1
+    return interfaces, total
 
 
 def _cycles(graph: dict[str, list[str]]) -> list[list[str]]:

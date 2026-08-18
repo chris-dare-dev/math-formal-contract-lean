@@ -258,7 +258,7 @@ run_cmd Lean.Elab.Command.liftTermElabM do
       mods.contains `MathFormalContractTest.MultiRootFixture do
     throwError "multi-root module scope omitted a constituent root"
   let (doc, sorryN) ← MathFormalContract.emitJsonForRoots
-    `MathFormalContract [`MathFormalContractTest] [] "FIXED"
+    `MathFormalContract [`MathFormalContractTest] #[] [] "FIXED"
   let .ok cs := (doc.getObjValD "constants").getArr? | throwError "no constants[]"
   if cs.isEmpty then
     throwError "multi-root emission swept 0 constants -- the vacuous pass"

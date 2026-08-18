@@ -33,19 +33,12 @@
       "depends_on": [],
       "frontier": [
         {
-          "id": "gltilde-universal-cover",
-          "kind_class": "missing-library",
-          "kind_label": "mathlib-gap",
-          "statement": "The universal cover of GL+(2,R) is not constructed in Mathlib at this revision; pi_1(S^1) = Z is absent.",
-          "discharged_by": null
-        },
-        {
           "id": "slicing-interface",
           "kind_class": "interface",
           "kind_label": "mathlib-gap",
           "statement": "The slicing interface this repo declares is claimed to model the anchor's Slicing structure.",
           "discharged_by": null,
-          "referent": "CategoryTheory.Triangulated.Slicing"
+          "no_referent": true
         }
       ],
       "minted_at": "2026-08-04",
@@ -53,14 +46,7 @@
       "supersedes": null,
       "superseded_by": null,
       "note": null,
-      "mint_unresolved_reason": null,
-      "external_decls": [
-        {
-          "name": "List.length_append",
-          "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
-          "note": "Already in Mathlib; restating it here would attest to the wrapper rather than to the theorem."
-        }
-      ]
+      "mint_unresolved_reason": null
     },
     "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.3": {
       "kind": "proposition",
@@ -83,17 +69,7 @@
       "quote_sha256": "83d4977e2a88ddae9063f4c0816222b6b8ae518b2f744f6303c1fe25286d1a0d",
       "mint_resolution": null,
       "depends_on": [],
-      "frontier": [
-        {
-          "id": "novel-structure",
-          "kind_class": "interface",
-          "kind_label": "mathlib-gap",
-          "statement": "A structure with no external analogue at this revision.",
-          "discharged_by": null,
-          "no_referent": true,
-          "referent_note": "Genuinely novel: no Mathlib or anchor constant models this, and saying so is the point of the field."
-        }
-      ],
+      "frontier": [],
       "minted_at": "2026-08-04",
       "minted_by": "Chris Dare",
       "supersedes": null,

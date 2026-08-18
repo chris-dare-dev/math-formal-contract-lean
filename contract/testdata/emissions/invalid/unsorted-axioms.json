@@ -26,7 +26,8 @@
     "internal": 0,
     "with_range": 2,
     "instances": 0,
-    "private": 0
+    "private": 0,
+    "external": 0
   },
   "constants": [
     {
@@ -43,6 +44,7 @@
       "num_levels": 0,
       "name": "MathFormalContractTest.taggedDef",
       "module": "MathFormalContractTest",
+      "scope": "topic",
       "local_deps": [],
       "kind": "def",
       "is_reducible": false,
@@ -76,6 +78,7 @@
       "num_levels": 0,
       "name": "MathFormalContractTest.tagged_equivalent",
       "module": "MathFormalContractTest",
+      "scope": "topic",
       "local_deps": [],
       "kind": "theorem",
       "is_reducible": false,
