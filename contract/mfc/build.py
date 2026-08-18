@@ -30,6 +30,26 @@ The text check is a tripwire, never the counter. Counting from prose would
 break the moment Lean rewords the message, which is precisely why the `kind`
 field exists.
 
+## A clean build and an unmeasured build are the same document
+
+`error_count`, `warning_count` and `sorry_diagnostic_count` are all `0` whether
+the build was spotless or the NDJSON covered one module of 494. Nothing else in
+`build/1.0` can tell those apart, which makes an unmeasured build the most
+flattering artifact this package could emit — the same absence
+`check-ilean-coverage` exists for, one level down in the build log.
+
+`measured` is the field that separates them. Its numerator is **declared** by
+the caller, because a module that elaborated cleanly leaves no trace in the
+NDJSON and cannot be recovered from it. Its denominator is **read from the
+emission**, never from the caller, so the one number that could be shrunk to
+flatter the other cannot be. A declared module absent from the emission's
+`modules[]` is a hard failure: coverage may be narrow, and it may not be
+invented.
+
+No ratio is stored. A reader divides two integers; a single `coverage: 100%`
+would be the collapsed trust token every schema here refuses, and it would be
+the first thing a tired reader believed.
+
 ## Nothing here is inferred from a partial stream
 
 A line that is not a JSON object, or an object missing a field the schema
@@ -173,12 +193,54 @@ def parse_checker(spec: str) -> dict[str, Any]:
             "allow_sorry": allow == "true"}
 
 
+def measured_scope(
+    emission: dict[str, Any],
+    *,
+    covers: list[str] | None,
+    covers_all: bool,
+) -> dict[str, Any]:
+    """The `measured` block: what the NDJSON covered, out of what exists.
+
+    `covers_all` is a claim, not an observation — no tool here can watch which
+    modules a log was produced over. It is spelled as its own flag so that
+    claiming total coverage is a deliberate act rather than the default that
+    happens when nobody passes anything.
+    """
+    in_scope = emission.get("modules")
+    if not (isinstance(in_scope, list) and in_scope):
+        raise BuildError(
+            "the emission carries no modules[]; without it there is no honest "
+            "denominator for what this build measured")
+
+    if covers_all:
+        covered = sorted(set(in_scope))
+    else:
+        if not covers:
+            raise BuildError(
+                "nothing declared as covered. A build.json whose diagnostics "
+                "cover no module reports a spotless build having measured "
+                "nothing; pass --covers, or --covers-all if the log really is "
+                "over every in-scope module")
+        unknown = sorted(set(covers) - set(in_scope))
+        if unknown:
+            raise BuildError(
+                f"declared as covered but not in the emission's modules[]: "
+                f"{', '.join(unknown)}. Coverage may be narrow; it may not be "
+                f"invented")
+        covered = sorted(set(covers))
+
+    return {"modules": covered, "in_scope_modules": len(set(in_scope))}
+
+
 def build(
     ndjson: str,
     *,
     environment: dict[str, Any],
+    emission: dict[str, Any],
     lake_build_exit: int,
     lake_build_jobs: int,
+    covers: list[str] | None = None,
+    covers_all: bool = False,
     independent_checkers: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Read a build log and return a complete `build/1.0` document."""
@@ -190,12 +252,14 @@ def build(
         raise BuildError(f"lake_build_jobs is {lake_build_jobs}; a build ran no "
                          f"fewer than zero jobs")
 
+    measured = measured_scope(emission, covers=covers, covers_all=covers_all)
     diagnostics = parse_ndjson(ndjson)
     return {
         "schema_version": "build/1.0",
         "env_digest": env_digest,
         "lake_build_exit": lake_build_exit,
         "lake_build_jobs": lake_build_jobs,
+        "measured": measured,
         "diagnostics": diagnostics,
         "error_count": sum(1 for d in diagnostics if d["severity"] == ERROR_SEVERITY),
         "warning_count": sum(1 for d in diagnostics if d["severity"] == WARNING_SEVERITY),

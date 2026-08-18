@@ -361,13 +361,15 @@ def cmd_bundle(args: argparse.Namespace) -> int:
 
 def cmd_build(args: argparse.Namespace) -> int:
     ndjson_path, env_path = Path(args.ndjson), Path(args.environment)
-    for p in (ndjson_path, env_path):
+    emission_path = Path(args.emission)
+    for p in (ndjson_path, env_path, emission_path):
         if not p.is_file():
             print(f"error: no such file: {p}", file=sys.stderr)
             return EXIT_USAGE
 
     try:
         environment = load_artifact(env_path)
+        emission = load_artifact(emission_path)
         ndjson = ndjson_path.read_text(encoding="utf-8")
     except (LoadError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -389,8 +391,11 @@ def cmd_build(args: argparse.Namespace) -> int:
         document = build_document(
             ndjson,
             environment=environment,
+            emission=emission,
             lake_build_exit=args.lake_exit,
             lake_build_jobs=args.lake_jobs,
+            covers=args.covers,
+            covers_all=args.covers_all,
             independent_checkers=checkers,
         )
     except BuildError as exc:
@@ -414,6 +419,18 @@ def cmd_build(args: argparse.Namespace) -> int:
           f"{document['warning_count']} warning(s))")
     print(f"  lake exit     {document['lake_build_exit']} "
           f"over {document['lake_build_jobs']} job(s)  [RECORDED, NOT THE GATE]")
+
+    m = document["measured"]
+    covered, in_scope = len(m["modules"]), m["in_scope_modules"]
+    if covered < in_scope:
+        # Said every run, and on stderr. Zero diagnostics over a fraction of the
+        # repository is the most flattering artifact this command can write, and
+        # the only thing standing between that and a reader is this line.
+        print(f"  PARTIAL       diagnostics cover {covered} of {in_scope} "
+              f"in-scope module(s); the counts below describe those and no "
+              f"others", file=sys.stderr)
+    else:
+        print(f"  measured      all {in_scope} in-scope module(s)")
 
     sorries = document["sorry_diagnostic_count"]
     if sorries:
@@ -1193,6 +1210,19 @@ def build_parser() -> argparse.ArgumentParser:
                      help="file of `lake env lean --json` output, one JSON "
                           "message per line")
     bld.add_argument("--environment", required=True, help="path to environment.json")
+    bld.add_argument("--emission", required=True,
+                     help="path to lean-emission.json; its modules[] is the "
+                          "denominator for what this build measured, and it is "
+                          "read from there rather than from the caller")
+    covered = bld.add_mutually_exclusive_group(required=True)
+    covered.add_argument("--covers", action="append", metavar="MODULE",
+                         help="an in-scope module the NDJSON covers, repeatable. "
+                              "Declared rather than observed: a module that "
+                              "elaborated cleanly leaves no trace in the log")
+    covered.add_argument("--covers-all", dest="covers_all", action="store_true",
+                         help="the NDJSON is over every in-scope module. A "
+                              "claim, spelled as its own flag so that making it "
+                              "is deliberate")
     bld.add_argument("--lake-exit", dest="lake_exit", type=int, required=True,
                      help="the exit code lake actually returned; recorded, "
                           "never the gate")

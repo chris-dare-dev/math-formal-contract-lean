@@ -334,6 +334,35 @@ progress output on the same handle is reported as the caller error it is.
 `axiom_policy` is: this package cannot know what else was run. An empty array
 reads as "none was run", which is different from the field being absent.
 
+### `measured`: a clean build and an unmeasured build are the same document
+
+`error_count`, `warning_count` and `sorry_diagnostic_count` are all `0` whether
+the build was spotless or the NDJSON covered one module of 494, and no other
+field in `build/1.0` can tell those apart. That makes an unmeasured build the
+most flattering artifact this package could write — the same absence
+`check-ilean-coverage` exists for, one level down in the build log.
+
+It is not a hypothetical. Measured on `leanprover/lean4:v4.32.1`, there is no
+cheap route to project-wide NDJSON: `lake env lean --json` on a root import
+file prints **nothing**, because imports are served from oleans and never
+re-reported; `moreLeanArgs = ["--json"]` is consumed by lake, which re-renders
+messages in its own text format; lake persists no structured log under
+`.lake/build`; and per-module invocation pays a full Mathlib import load each
+time. A consumer repository's CI therefore measures a handful of modules, and
+`measured` is what stops that reading as a clean sweep.
+
+Its numerator is **declared**, because a module that elaborated cleanly leaves
+no trace in the log and cannot be recovered from it — `--covers MODULE`, or
+`--covers-all` as a deliberate claim rather than a default. Its denominator is
+**read from the emission's `modules[]`**, never from the caller, so the one
+number that could be shrunk to flatter the other cannot be. A declared module
+absent from that list is a hard failure: coverage may be narrow, and it may not
+be invented.
+
+No ratio is stored. A reader divides two integers. A single `coverage: 100%`
+would be the collapsed trust token every schema here refuses, and it would be
+the first thing a tired reader believed.
+
 ## `conformance`: seven valid artifacts that do not describe the same thing
 
 `validate` asks whether one artifact is well formed. `lint` asks whether one

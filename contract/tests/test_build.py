@@ -26,7 +26,13 @@ from pathlib import Path
 
 import pytest
 
-from contract.mfc.build import BuildError, build, parse_checker, parse_ndjson
+from contract.mfc.build import (
+    BuildError,
+    build,
+    measured_scope,
+    parse_checker,
+    parse_ndjson,
+)
 from contract.mfc.cli import EXIT_OK, EXIT_USAGE, main
 
 HERE = Path(__file__).resolve().parent
@@ -45,9 +51,22 @@ def _environment() -> dict:
     return json.loads((VALID_DIR / "environment-1.0.json").read_text(encoding="utf-8"))
 
 
+def _emission() -> dict:
+    return json.loads((VALID_DIR / "emission-1.0.json").read_text(encoding="utf-8"))
+
+
+def _build(ndjson: str, **kw):
+    """`build` with the two coverage inputs defaulted to 'all of it'."""
+    kw.setdefault("environment", _environment())
+    kw.setdefault("emission", _emission())
+    kw.setdefault("covers_all", True)
+    kw.setdefault("lake_build_exit", 0)
+    kw.setdefault("lake_build_jobs", 1)
+    return build(ndjson, **kw)
+
+
 def test_a_sorry_is_counted_while_lake_exits_zero() -> None:
-    doc = build(SORRY_LOG, environment=_environment(),
-                lake_build_exit=0, lake_build_jobs=1)
+    doc = _build(SORRY_LOG)
     assert doc["lake_build_exit"] == 0
     assert doc["sorry_diagnostic_count"] == 1
 
@@ -56,23 +75,20 @@ def test_a_sorry_message_not_tagged_hasSorry_is_a_hard_failure() -> None:
     """The tripwire. A renamed `kind` must raise, never count zero."""
     renamed = SORRY_LOG.replace('"kind":"hasSorry"', '"kind":"elab.hasSorry"')
     with pytest.raises(BuildError, match="not 'hasSorry'"):
-        build(renamed, environment=_environment(),
-              lake_build_exit=0, lake_build_jobs=1)
+        _build(renamed)
 
 
 def test_a_sorry_message_with_no_kind_at_all_is_a_hard_failure() -> None:
     dropped = SORRY_LOG.replace('"kind":"hasSorry",', "")
     with pytest.raises(BuildError, match="sorry_diagnostic_count"):
-        build(dropped, environment=_environment(),
-              lake_build_exit=0, lake_build_jobs=1)
+        _build(dropped)
 
 
 def test_an_ordinary_warning_does_not_trip_the_tripwire() -> None:
     ordinary = ('{"data":"unused variable `hb`","endPos":{"column":19,"line":3},'
                 '"fileName":"B.lean","kind":"linter.unusedVariables",'
                 '"pos":{"column":17,"line":3},"severity":"warning"}\n')
-    doc = build(ordinary, environment=_environment(),
-                lake_build_exit=0, lake_build_jobs=1)
+    doc = _build(ordinary)
     assert doc["sorry_diagnostic_count"] == 0
     assert doc["warning_count"] == 1
 
@@ -88,8 +104,7 @@ def test_end_pos_null_becomes_a_zero_width_range_at_pos() -> None:
 def test_information_severity_is_kept_but_counted_in_neither() -> None:
     line = ('{"data":"note","endPos":null,"fileName":"B.lean","kind":"",'
             '"pos":{"column":0,"line":1},"severity":"information"}\n')
-    doc = build(line, environment=_environment(),
-                lake_build_exit=0, lake_build_jobs=1)
+    doc = _build(line)
     assert len(doc["diagnostics"]) == 1
     assert doc["error_count"] == doc["warning_count"] == 0
 
@@ -116,13 +131,12 @@ def test_blank_lines_are_skipped() -> None:
 
 def test_an_environment_without_a_digest_is_refused() -> None:
     with pytest.raises(BuildError, match="no env_digest"):
-        build(SORRY_LOG, environment={}, lake_build_exit=0, lake_build_jobs=1)
+        _build(SORRY_LOG, environment={})
 
 
 def test_negative_jobs_are_refused() -> None:
     with pytest.raises(BuildError, match="no fewer than zero"):
-        build(SORRY_LOG, environment=_environment(),
-              lake_build_exit=0, lake_build_jobs=-1)
+        _build(SORRY_LOG, lake_build_jobs=-1)
 
 
 # --- independent_checkers ----------------------------------------------------
@@ -155,15 +169,23 @@ def _write_tree(tmp_path: Path, log: str) -> tuple[Path, Path, Path]:
     env_path.write_text(json.dumps(_environment(), indent=2), encoding="utf-8")
     log_path = tmp_path / "log.ndjson"
     log_path.write_text(log, encoding="utf-8")
+    (tmp_path / "lean-emission.json").write_text(
+        json.dumps(_emission()), encoding="utf-8")
     return env_path, log_path, tmp_path / "attest" / "build.json"
+
+
+def _cli(tmp_path: Path, env_path: Path, log_path: Path, out: Path,
+         *extra: str) -> list[str]:
+    return ["build", "--ndjson", str(log_path), "--environment", str(env_path),
+            "--emission", str(tmp_path / "lean-emission.json"),
+            "--lake-exit", "0", "--lake-jobs", "3428",
+            "--out", str(out), *extra]
 
 
 def test_cli_writes_a_schema_valid_build(tmp_path: Path) -> None:
     env_path, log_path, out = _write_tree(tmp_path, SORRY_LOG)
-    rc = main(["build", "--ndjson", str(log_path), "--environment", str(env_path),
-               "--lake-exit", "0", "--lake-jobs", "3428",
-               "--checker", "leanchecker:bundled-4.32.1:pass:false",
-               "--out", str(out)])
+    rc = main(_cli(tmp_path, env_path, log_path, out, "--covers-all",
+                   "--checker", "leanchecker:bundled-4.32.1:pass:false"))
     assert rc == EXIT_OK
     doc = json.loads(out.read_text(encoding="utf-8"))
     assert doc["schema_version"] == "build/1.0"
@@ -174,8 +196,7 @@ def test_cli_writes_a_schema_valid_build(tmp_path: Path) -> None:
 def test_cli_reports_an_unreadable_log_as_usage_not_findings(tmp_path: Path) -> None:
     """Exit 2, never 1: 'could not measure' is not 'has findings'."""
     env_path, log_path, out = _write_tree(tmp_path, "not json at all\n")
-    rc = main(["build", "--ndjson", str(log_path), "--environment", str(env_path),
-               "--lake-exit", "0", "--lake-jobs", "1", "--out", str(out)])
+    rc = main(_cli(tmp_path, env_path, log_path, out, "--covers-all"))
     assert rc == EXIT_USAGE
     assert not out.exists()
 
@@ -183,6 +204,66 @@ def test_cli_reports_an_unreadable_log_as_usage_not_findings(tmp_path: Path) -> 
 def test_cli_refuses_an_environment_that_is_not_one(tmp_path: Path) -> None:
     env_path, log_path, out = _write_tree(tmp_path, SORRY_LOG)
     env_path.write_text(json.dumps({"schema_version": "build/1.0"}), encoding="utf-8")
-    rc = main(["build", "--ndjson", str(log_path), "--environment", str(env_path),
-               "--lake-exit", "0", "--lake-jobs", "1", "--out", str(out)])
+    rc = main(_cli(tmp_path, env_path, log_path, out, "--covers-all"))
     assert rc == EXIT_USAGE
+
+
+# --- `measured`: the field that separates clean from unmeasured ---------------
+
+def test_a_clean_build_and_an_unmeasured_one_differ_only_here() -> None:
+    """The whole reason the block exists, asserted rather than described."""
+    spotless = _build("")
+    assert spotless["error_count"] == spotless["warning_count"] == 0
+    assert spotless["sorry_diagnostic_count"] == 0
+    narrow = _build("", covers_all=False, covers=["MathFormalContractTest"],
+                    emission={"modules": ["MathFormalContractTest", "Other.Mod"]})
+    # Every count is identical. Only `measured` tells the reader which is which.
+    for field in ("error_count", "warning_count", "sorry_diagnostic_count"):
+        assert spotless[field] == narrow[field]
+    assert spotless["measured"] != narrow["measured"]
+    assert narrow["measured"] == {"modules": ["MathFormalContractTest"],
+                                  "in_scope_modules": 2}
+
+
+def test_coverage_may_be_narrow_but_not_invented() -> None:
+    with pytest.raises(BuildError, match="may not be\ninvented|not be invented"):
+        measured_scope({"modules": ["A"]}, covers=["A", "B"], covers_all=False)
+
+
+def test_declaring_nothing_is_refused() -> None:
+    with pytest.raises(BuildError, match="having measured nothing"):
+        measured_scope({"modules": ["A"]}, covers=[], covers_all=False)
+
+
+def test_an_emission_with_no_modules_has_no_honest_denominator() -> None:
+    with pytest.raises(BuildError, match="no honest"):
+        measured_scope({}, covers=None, covers_all=True)
+
+
+def test_the_denominator_comes_from_the_emission_not_the_caller() -> None:
+    """`--covers-all` cannot shrink the denominator to flatter itself."""
+    scope = measured_scope({"modules": ["A", "B", "C"]}, covers=None, covers_all=True)
+    assert scope == {"modules": ["A", "B", "C"], "in_scope_modules": 3}
+
+
+def test_covers_all_over_a_duplicated_module_list_counts_once() -> None:
+    scope = measured_scope({"modules": ["A", "A", "B"]}, covers=None, covers_all=True)
+    assert scope == {"modules": ["A", "B"], "in_scope_modules": 2}
+
+
+def test_cli_says_partial_coverage_out_loud(tmp_path: Path, capsys) -> None:
+    env_path, log_path, out = _write_tree(tmp_path, SORRY_LOG)
+    emission = _emission()
+    emission["modules"] = ["MathFormalContractTest", "Another.Module"]
+    (tmp_path / "lean-emission.json").write_text(json.dumps(emission), encoding="utf-8")
+    rc = main(_cli(tmp_path, env_path, log_path, out,
+                   "--covers", "MathFormalContractTest"))
+    assert rc == EXIT_OK
+    assert "cover 1 of 2 in-scope module(s)" in capsys.readouterr().err
+
+
+def test_cli_requires_a_coverage_claim(tmp_path: Path) -> None:
+    """Neither flag is not a default; argparse refuses before anything is read."""
+    env_path, log_path, out = _write_tree(tmp_path, SORRY_LOG)
+    with pytest.raises(SystemExit):
+        main(_cli(tmp_path, env_path, log_path, out))
