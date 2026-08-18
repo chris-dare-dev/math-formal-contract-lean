@@ -3,6 +3,13 @@
   "env_digest": "52b407ea4c1e8c51bfefe1d9a1f173e142729c6abf09a750a383869d5b160349",
   "lake_build_exit": 0,
   "lake_build_jobs": 3428,
+  "measured": {
+    "modules": [
+      "BridgelandStabLean",
+      "BridgelandStabLean.GroupAction.SlicingAction"
+    ],
+    "in_scope_modules": 90
+  },
   "diagnostics": [
     {
       "file_name": "BridgelandStabLean/GroupAction/SlicingAction.lean",

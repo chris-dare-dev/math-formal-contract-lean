@@ -9,6 +9,7 @@
     "env_digest",
     "lake_build_exit",
     "lake_build_jobs",
+    "measured",
     "diagnostics",
     "error_count",
     "warning_count",
@@ -30,6 +31,31 @@
     "lake_build_jobs": {
       "type": "integer",
       "minimum": 0
+    },
+    "measured": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modules",
+        "in_scope_modules"
+      ],
+      "properties": {
+        "modules": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          },
+          "$comment": "In-scope module names the NDJSON actually covered. minItems 1: a build.json that measured nothing must not validate."
+        },
+        "in_scope_modules": {
+          "type": "integer",
+          "minimum": 1,
+          "$comment": "Read from the emission's `modules[]`, never from the caller, so the denominator cannot be shrunk to flatter the numerator."
+        }
+      },
+      "$comment": "A CLEAN BUILD AND AN UNMEASURED BUILD PRODUCE IDENTICAL COUNTS. error_count, warning_count and sorry_diagnostic_count are all 0 whether the build was spotless or the log covered one module of 494, and no other field here can tell the two apart -- the same absence `check-ilean-coverage` exists for, one level down. This block is what distinguishes them. NO RATIO IS STORED: a reader divides. A single `coverage: 100%` would be the collapsed trust token every schema here refuses, and it would be the first thing a tired reader trusted."
     },
     "diagnostics": {
       "type": "array",

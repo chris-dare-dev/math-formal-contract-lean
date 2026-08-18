@@ -27,9 +27,11 @@ from pathlib import Path
 from typing import Any
 
 from . import bootstrap as bootstrap_flag
+from .build import BuildError, parse_checker
+from .build import build as build_document
 from .bundle import BundleError, build_declarations, dumps
 from .conformance import check as conformance_check
-from .conformance import evidence_table, gather
+from .conformance import evidence_table, gather, short_type
 from .digest import file_digest
 from .freshness import DEFAULT_MAX_AGE_DAYS, FreshnessError
 from .freshness import check as freshness_check
@@ -61,6 +63,8 @@ from .scaffold import (
     render,
     write,
 )
+from .seal import SealError, parse_provisional
+from .seal import seal as seal_bundle
 from .lint import (
     FORBIDDEN_PROPERTY_NAMES,
     VOLATILE_PROPERTY_NAMES,
@@ -352,6 +356,92 @@ def cmd_bundle(args: argparse.Namespace) -> int:
         # -- especially when -- the answer is bad; `mfc lint` is the gate.
         print(f"note: {sorries} declaration(s) depend on sorryAx, "
               f"{disallowed} carry a disallowed axiom", file=sys.stderr)
+    return EXIT_OK
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    ndjson_path, env_path = Path(args.ndjson), Path(args.environment)
+    emission_path = Path(args.emission)
+    for p in (ndjson_path, env_path, emission_path):
+        if not p.is_file():
+            print(f"error: no such file: {p}", file=sys.stderr)
+            return EXIT_USAGE
+
+    try:
+        environment = load_artifact(env_path)
+        emission = load_artifact(emission_path)
+        ndjson = ndjson_path.read_text(encoding="utf-8")
+    except (LoadError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    # Validate the INPUT first. A build.json stamped with an env_digest read
+    # out of a malformed environment record would be well formed and wrong.
+    if not isinstance(environment, dict) or \
+            environment.get("schema_version") != "environment/1.0":
+        print(f"error: {env_path.name}: expected schema_version "
+              f"'environment/1.0'", file=sys.stderr)
+        return EXIT_USAGE
+    rc = _validate_against(environment, "environment/1.0", env_path.name)
+    if rc is not None:
+        return rc
+
+    try:
+        checkers = [parse_checker(spec) for spec in (args.checker or [])]
+        document = build_document(
+            ndjson,
+            environment=environment,
+            emission=emission,
+            lake_build_exit=args.lake_exit,
+            lake_build_jobs=args.lake_jobs,
+            covers=args.covers,
+            covers_all=args.covers_all,
+            independent_checkers=checkers,
+        )
+    except BuildError as exc:
+        # Exit 2, never 1. "The build log could not be read" must not be
+        # reportable as "the build has findings".
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _validate_against(document, "build/1.0", Path(args.out).name)
+    if rc is not None:
+        return rc
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(dumps(document), encoding="utf-8")
+
+    print(f"wrote {out}")
+    print(f"  env_digest    {document['env_digest']}")
+    print(f"  diagnostics   {len(document['diagnostics'])} "
+          f"({document['error_count']} error(s), "
+          f"{document['warning_count']} warning(s))")
+    print(f"  lake exit     {document['lake_build_exit']} "
+          f"over {document['lake_build_jobs']} job(s)  [RECORDED, NOT THE GATE]")
+
+    m = document["measured"]
+    covered, in_scope = len(m["modules"]), m["in_scope_modules"]
+    if covered < in_scope:
+        # Said every run, and on stderr. Zero diagnostics over a fraction of the
+        # repository is the most flattering artifact this command can write, and
+        # the only thing standing between that and a reader is this line.
+        print(f"  PARTIAL       diagnostics cover {covered} of {in_scope} "
+              f"in-scope module(s); the counts below describe those and no "
+              f"others", file=sys.stderr)
+    else:
+        print(f"  measured      all {in_scope} in-scope module(s)")
+
+    sorries = document["sorry_diagnostic_count"]
+    if sorries:
+        # Said on stderr because the exit code above may well be 0: that is the
+        # whole reason this field exists rather than being inferred.
+        print(f"  SORRY         {sorries} diagnostic(s) report a sorry, while "
+              f"lake exited {document['lake_build_exit']}", file=sys.stderr)
+    if not document["independent_checkers"]:
+        print("  no independent checkers recorded; the array is empty rather "
+              "than absent, which reads as 'none was run' and not as 'none was "
+              "needed'")
     return EXIT_OK
 
 
@@ -976,6 +1066,86 @@ def cmd_restate_check(args: argparse.Namespace) -> int:
     return rc
 
 
+def cmd_seal(args: argparse.Namespace) -> int:
+    root, env_path = Path(args.root), Path(args.environment)
+    registry_path = Path(args.registry)
+    if not root.is_dir():
+        print(f"error: no such root: {root}", file=sys.stderr)
+        return EXIT_USAGE
+    for p in (env_path, registry_path):
+        if not p.is_file():
+            print(f"error: no such file: {p}", file=sys.stderr)
+            return EXIT_USAGE
+
+    try:
+        environment = load_artifact(env_path)
+    except (LoadError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    rc = _validate_against(environment, "environment/1.0", env_path.name)
+    if rc is not None:
+        return rc
+
+    resolution = None
+    if args.resolution:
+        try:
+            resolution = load_artifact(Path(args.resolution))
+        except (LoadError, OSError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_USAGE
+        rc = _validate_against(resolution, "resolution/1.0",
+                               Path(args.resolution).name)
+        if rc is not None:
+            return rc
+
+    try:
+        document = seal_bundle(
+            root=root,
+            environment_path=env_path,
+            environment=environment,
+            registry_path=registry_path,
+            declarations_path=Path(args.declarations) if args.declarations else None,
+            build_path=Path(args.build) if args.build else None,
+            review_path=Path(args.review) if args.review else None,
+            review_produced_by=args.review_produced_by,
+            resolution_path=Path(args.resolution) if args.resolution else None,
+            resolution=resolution,
+            provisional=[parse_provisional(s) for s in (args.provisional or [])],
+            allow_dirty=args.allow_dirty,
+        )
+    except SealError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    rc = _validate_against(document, "bundle/1.0", Path(args.out).name)
+    if rc is not None:
+        return rc
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(dumps(document), encoding="utf-8")
+
+    subject = document["subject"][0]
+    print(f"wrote {out}")
+    print(f"  subject       {subject['name']} @ {subject['digest']['gitCommit'][:10]}")
+    print(f"  env_digest    {document['env_digest']}")
+    for pred in document["predicates"]:
+        env = pred["env_digest"]
+        label = "null" if env is None else env[:10]
+        print(f"  {short_type(pred['predicateType']):<22} {pred['file']}  "
+              f"env={label}  self_attested={str(pred['self_attested']).lower()}")
+
+    if subject["digest"]["gitTag"] is None:
+        # Same sentence `mfc env` uses, for the same reason: the bundle is a
+        # valid artifact and the release it describes does not exist.
+        print("  UNTAGGED      valid artifact, invalid release -- a release pin "
+              "requires a tag")
+    if args.allow_dirty and environment.get("root_package", {}).get("worktree_dirty"):
+        print("  DIRTY         sealed over a worktree with uncommitted changes; "
+              "this bundle is explicitly not a release", file=sys.stderr)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfc",
@@ -1026,6 +1196,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     bun.set_defaults(func=cmd_bundle)
 
+    bld = sub.add_parser(
+        "build",
+        help="turn `lake env lean --json` NDJSON into build/1.0",
+        description="Records what the build reported. `lake_build_exit` is "
+                    "RECORDED AND NEVER CONSULTED -- on this toolchain a build "
+                    "whose only defect is a sorry exits 0 -- and the gate is "
+                    "`sorry_diagnostic_count`, counted from records whose kind "
+                    "is hasSorry. A message that reads like a sorry but is not "
+                    "tagged as one is a hard failure, not an uncounted warning.",
+    )
+    bld.add_argument("--ndjson", required=True,
+                     help="file of `lake env lean --json` output, one JSON "
+                          "message per line")
+    bld.add_argument("--environment", required=True, help="path to environment.json")
+    bld.add_argument("--emission", required=True,
+                     help="path to lean-emission.json; its modules[] is the "
+                          "denominator for what this build measured, and it is "
+                          "read from there rather than from the caller")
+    covered = bld.add_mutually_exclusive_group(required=True)
+    covered.add_argument("--covers", action="append", metavar="MODULE",
+                         help="an in-scope module the NDJSON covers, repeatable. "
+                              "Declared rather than observed: a module that "
+                              "elaborated cleanly leaves no trace in the log")
+    covered.add_argument("--covers-all", dest="covers_all", action="store_true",
+                         help="the NDJSON is over every in-scope module. A "
+                              "claim, spelled as its own flag so that making it "
+                              "is deliberate")
+    bld.add_argument("--lake-exit", dest="lake_exit", type=int, required=True,
+                     help="the exit code lake actually returned; recorded, "
+                          "never the gate")
+    bld.add_argument("--lake-jobs", dest="lake_jobs", type=int, required=True,
+                     help="jobs lake reported building")
+    bld.add_argument("--checker", action="append", metavar="N:V:VALUE:ALLOW_SORRY",
+                     help="an independent checker's verdict, repeatable, e.g. "
+                          "leanchecker:bundled-4.32.1:pass:false")
+    bld.add_argument("--out", required=True, help="where to write build.json")
+    bld.set_defaults(func=cmd_build)
+
     lnt = sub.add_parser(
         "lint",
         help="run the E-01..E-10 content rules over an emission",
@@ -1063,6 +1271,43 @@ def build_parser() -> argparse.ArgumentParser:
     con.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     con.set_defaults(func=cmd_conformance)
+
+    slp = sub.add_parser(
+        "seal",
+        help="assemble bundle/1.0, the in-toto Statement conformance reads",
+        description="The producer for the file every conformance rule needs "
+                    "and nothing wrote. REFUSES to omit a required predicate: "
+                    "a bundle with no build/v1 satisfies eleven of twelve rules "
+                    "while attesting nothing about the build, and a tool that "
+                    "wrote it would be shipping the C-12 fixture as a product. "
+                    "A dirty worktree is refused for the same reason C-09 "
+                    "exists.",
+    )
+    slp.add_argument("--root", default=".",
+                     help="directory every predicate file is named relative to "
+                          "(default: .)")
+    slp.add_argument("--environment", required=True, help="path to environment.json")
+    slp.add_argument("--registry", required=True,
+                     help="registry file; its bytes are the registry_sha256 the "
+                          "corpus side is compared against by C-08")
+    slp.add_argument("--declarations", help="path to declarations.json")
+    slp.add_argument("--build", help="path to build.json")
+    slp.add_argument("--review", help="path to review.yaml")
+    slp.add_argument("--review-produced-by", dest="review_produced_by",
+                     metavar="WHO",
+                     help="who performed the review, e.g. 'human:Ada Lovelace'; "
+                          "required with --review")
+    slp.add_argument("--resolution", help="path to resolution.json (arXMCP's)")
+    slp.add_argument("--provisional", action="append",
+                     metavar="FILE:PRODUCED_BY:ENV_DIGEST",
+                     help="evidence from ANOTHER environment, repeatable; the "
+                          "env_digest is required because C-05 is what keeps it "
+                          "visibly separate")
+    slp.add_argument("--allow-dirty", dest="allow_dirty", action="store_true",
+                     help="seal over uncommitted changes; the result is "
+                          "explicitly not a release")
+    slp.add_argument("--out", required=True, help="where to write bundle.json")
+    slp.set_defaults(func=cmd_seal)
 
     joi = sub.add_parser(
         "join",
