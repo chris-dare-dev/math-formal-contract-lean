@@ -31,7 +31,16 @@ readme = "README.md"
 # import annotations` covers every `X | Y` annotation here and nothing else
 # needs a newer runtime. Requiring 3.10 would have locked out the default
 # system interpreter on the machine that has to consume this, for nothing.
-requires-python = ">=3.9"
+# 3.11, not 3.9, and the difference is not cosmetic: `mfc/env.py` imports
+# `tomllib` to read lakefile.toml, and tomllib is stdlib only from 3.11.
+# Declaring 3.9 did not make it work on 3.9 -- it made pip install
+# happily and then fail at IMPORT, inside whatever step first touched
+# `mfc env`. Observed on a self-hosted macOS runner whose `python3` is
+# 3.9.6: 20 minutes of Lean build, then ModuleNotFoundError.
+#
+# A truthful floor moves that failure to `pip install`, where it says
+# what it needs.
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Chris Dare" }]
 keywords = ["lean", "formalization", "provenance", "json-schema"]

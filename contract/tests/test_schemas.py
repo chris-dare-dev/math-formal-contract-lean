@@ -164,3 +164,32 @@ def test_an_empty_emission_is_not_a_representable_artifact() -> None:
     counts = schema["properties"]["counts"]["properties"]
     assert counts["total"]["minimum"] == 1
     assert counts["in_scope"]["minimum"] == 1
+
+
+def test_the_declared_python_floor_matches_what_the_code_imports() -> None:
+    """`requires-python` is a claim, and it was false.
+
+    `mfc/env.py` imports `tomllib`, stdlib only from 3.11, while
+    `pyproject.toml` declared `>=3.9`. pip therefore installed happily on 3.9
+    and failed at IMPORT — observed on a self-hosted macOS runner whose
+    `python3` is 3.9.6, after twenty minutes of Lean build.
+
+    Asserted rather than remembered: if a future module imports something with
+    a higher floor, this is where the mismatch surfaces.
+    """
+    import re
+    root = Path(__file__).resolve().parent.parent
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+    floor = re.search(r'^requires-python = ">=(\d+)\.(\d+)"', pyproject, re.M)
+    assert floor, "pyproject must declare requires-python"
+    major, minor = int(floor.group(1)), int(floor.group(2))
+
+    #: module -> the (major, minor) it first became importable
+    STDLIB_FLOORS = {"tomllib": (3, 11), "graphlib": (3, 9)}
+    for source in (root / "mfc").glob("*.py"):
+        for name, needs in STDLIB_FLOORS.items():
+            if re.search(rf"^\s*import {name}\b", source.read_text(encoding="utf-8"), re.M):
+                assert (major, minor) >= needs, (
+                    f"{source.name} imports {name}, which needs "
+                    f"{needs[0]}.{needs[1]}, but requires-python says "
+                    f"{major}.{minor}")
