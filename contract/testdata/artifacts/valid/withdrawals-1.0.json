@@ -1,0 +1,13 @@
+{
+  "schema_version": "withdrawals/1.0",
+  "registry_id": "9f4c1a20b7d3",
+  "withdrawals": [
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.lem-8.3",
+      "withdrawn_at": "2026-08-17",
+      "reason": "Human review found the formalized statement adds a hypothesis the paper's lemma does not carry, so the binding overstates what was proved.",
+      "withdrawn_by": "Chris Dare",
+      "supersedes_review": null
+    }
+  ]
+}
