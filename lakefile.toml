@@ -2,7 +2,7 @@ name = "MathFormalContract"
 version = "0.1.0"
 defaultTargets = [
   "MathFormalContract", "MathFormalContractTest",
-  "mfc_emit_self", "mfc_emit_selftest",
+  "mfc_emit_self", "mfc_emit_selftest", "mfc_restate_selftest",
 ]
 keywords = ["math", "formalization", "provenance"]
 
@@ -65,5 +65,15 @@ supportInterpreter = true
 [[lean_exe]]
 name = "mfc_emit_selftest"
 root = "MfcEmitSelfTest"
+srcDir = "exe"
+supportInterpreter = true
+
+# The restate producer, pointed at the test library. `restateOne` is proved by
+# `run_cmd` inside that library; this proves the PRODUCER around it -- runtime
+# import, term-elaboration context, artifact -- which no test in this package
+# otherwise reaches.
+[[lean_exe]]
+name = "mfc_restate_selftest"
+root = "MfcRestateSelf"
 srcDir = "exe"
 supportInterpreter = true
