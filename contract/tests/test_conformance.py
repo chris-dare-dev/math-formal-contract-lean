@@ -406,3 +406,100 @@ def test_cli_reports_unrecognized_predicates_as_unchecked(
     main(["conformance", "--bundle", str(tree)])
     err = capsys.readouterr().err
     assert "NOT checked" in err
+
+
+# --- C-10 across an environment bump (#646) ----------------------------------
+#
+# env_digest hashes every package rev, so a single dependency bump invalidates
+# every review at once while the mathematics sits still. That is not a
+# hypothetical: it happened to the FIRST review this project ever recorded,
+# hours after it was written, when MathFormalContract moved d3df3818 ->
+# 21e3b442 and the statement digest was byte-identical on both sides.
+#
+# `restated` carries a review forward. Nothing else does -- and `not_checkable`
+# in particular must not be reported as though the statement changed.
+
+def _restate(key: str, outcome: str, reason: str | None = None) -> dict:
+    return {
+        "schema_version": "restate/1.0",
+        "lean_version": "4.32.1",
+        "checked_at": "2026-08-19T00:00:00Z",
+        "counts": {"restated": int(outcome == "restated"),
+                   "changed": int(outcome == "changed"),
+                   "not_checkable": int(outcome == "not_checkable")},
+        "results": [{"key": key, "decl": "Foo.bar",
+                     "outcome": outcome, "reason": reason}],
+    }
+
+
+def _bumped(root: Path) -> tuple[dict, list, str]:
+    """The coherent tree, with the review pointing at an older environment."""
+    bundle_path = coherent_tree(root)
+    review_path = root / LAYOUT["human-review"][1]
+    review = json.loads(review_path.read_text(encoding="utf-8"))
+    key = review["reviews"][0]["key"]
+    review["reviews"][0]["reviewed_env_digest"] = "a" * 64
+    review_path.write_text(json.dumps(review, indent=2) + "\n", encoding="utf-8")
+
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    for pred in bundle["predicates"]:
+        if pred["file"] == LAYOUT["human-review"][1]:
+            pred["sha256"] = file_digest(review_path)
+    bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+    return bundle, gather(bundle, root), key
+
+
+def _c10(bundle, evidence, **kw):
+    return next(r for r in check(bundle, evidence, **kw) if r.rule == "C-10")
+
+
+def test_c10_still_fails_on_a_bump_with_no_restate_evidence(tmp_path: Path) -> None:
+    """Unchanged behaviour: without evidence, a moved environment is stale."""
+    bundle, evidence, _ = _bumped(tmp_path)
+    assert _c10(bundle, evidence).status is Status.FAIL
+
+
+def test_c10_carries_a_review_forward_on_restated(tmp_path: Path) -> None:
+    bundle, evidence, key = _bumped(tmp_path)
+    result = _c10(bundle, evidence, restate=_restate(key, "restated"))
+    assert result.status is Status.PASS
+    # Carried forward is said out loud; a reader must be able to tell an
+    # inherited review from one performed in this environment.
+    assert "carried forward" in result.reason
+
+
+def test_c10_fails_when_restate_says_changed(tmp_path: Path) -> None:
+    bundle, evidence, key = _bumped(tmp_path)
+    result = _c10(bundle, evidence, restate=_restate(key, "changed"))
+    assert result.status is Status.FAIL
+    assert "the statement moved" in result.findings[0].detail
+
+
+def test_c10_does_not_report_not_checkable_as_changed(tmp_path: Path) -> None:
+    """The rule #188 exists for, one layer out: nobody knows is not it changed."""
+    bundle, evidence, key = _bumped(tmp_path)
+    result = _c10(bundle, evidence,
+                  restate=_restate(key, "not_checkable", "parse failed"))
+    assert result.status is Status.FAIL
+    detail = result.findings[0].detail
+    assert "NOBODY KNOWS" in detail
+    assert "parse failed" in detail
+    assert "not evidence that it did change" in detail
+
+
+def test_c10_fails_when_the_restate_run_omits_the_reviewed_key(tmp_path: Path) -> None:
+    """An omitted entry reads exactly like a checked one."""
+    bundle, evidence, _ = _bumped(tmp_path)
+    result = _c10(bundle, evidence, restate=_restate("stmt:ffffffffffff:other", "restated"))
+    assert result.status is Status.FAIL
+    assert "does not mention this key" in result.findings[0].detail
+
+
+def test_restate_is_irrelevant_when_the_environment_matches(tmp_path: Path) -> None:
+    """No bump, no carry-forward: the review was performed here."""
+    bundle_path = coherent_tree(tmp_path)
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    result = _c10(bundle, gather(bundle, tmp_path),
+                  restate=_restate("stmt:ffffffffffff:other", "changed"))
+    assert result.status is Status.PASS
+    assert result.reason == ""
