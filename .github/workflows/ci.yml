@@ -132,9 +132,48 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --quiet './contract'
+
+          # THE FIXTURE'S COMMIT, RE-POINTED AT THIS CHECKOUT.
+          #
+          # #628's commit binding refuses a bundle whose emission was produced
+          # at one commit and whose environment describes another -- correctly:
+          # that pairing attests commit B's subject with commit A's declaration
+          # content, and every other rule stays green while it does.
+          #
+          # This job hits it structurally. The emission is LIVE, generated from
+          # this checkout a step ago; the environment is a FIXTURE pinned to
+          # bridgeland-stab-lean's f166a3d. They can never agree, so from
+          # 21e3b442 onward this job could not pass at any commit.
+          #
+          # Re-pointing the fixture's rev is the honest repair rather than
+          # weakening the check, because this pairing was never a trust record.
+          # README says so directly: "this repo's own CI cannot produce a real
+          # environment record for itself, and its use of the fixture is a test
+          # of the emitter rather than a trust record." A real one is not
+          # available either -- `mfc env` needs the contract package in a lake
+          # manifest, and this package deliberately has no dependencies at all.
+          #
+          # The binding keeps full strength everywhere it is a trust claim: in
+          # a topic repo, where both artifacts are real, and in the contract
+          # job's fixtures, which pair fixture with fixture.
+          python - <<'PY'
+          import json, os, pathlib
+          src = pathlib.Path("contract/testdata/artifacts/valid/environment-1.0.json")
+          env = json.loads(src.read_text(encoding="utf-8"))
+          env["root_package"]["rev"] = os.environ["GITHUB_SHA"]
+          # The tag would be a lie in the other direction: this checkout is not
+          # the fixture's release, and seal reads `tag` straight into
+          # subject.digest.gitTag.
+          env["root_package"]["tag"] = None
+          pathlib.Path("attest").mkdir(exist_ok=True)
+          pathlib.Path("attest/environment-selftest.json").write_text(
+              json.dumps(env, indent=2) + "\n", encoding="utf-8")
+          PY
+          ENV_JSON=attest/environment-selftest.json
+
           mfc bundle \
             --emission attest/lean-emission.json \
-            --environment contract/testdata/artifacts/valid/environment-1.0.json \
+            --environment "$ENV_JSON" \
             --out attest/declarations.json
           mfc validate attest/declarations.json
 
@@ -144,7 +183,7 @@ jobs:
           # rules did not run rather than hiding them in a count.
           mfc lint \
             --emission attest/lean-emission.json \
-            --environment contract/testdata/artifacts/valid/environment-1.0.json \
+            --environment "$ENV_JSON" \
             --closed-lanes contract/testdata/closed-lanes.json
 
       - name: mfc init renders a repo that reaches a green build
