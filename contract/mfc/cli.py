@@ -36,6 +36,7 @@ from .digest import file_digest
 from .freshness import DEFAULT_MAX_AGE_DAYS, FreshnessError
 from .freshness import check as freshness_check
 from .restate import RestateError
+from .review import check as review_check
 from .restate import carried_forward
 from .restate import check as restate_check
 from .withdrawals import WithdrawalsError
@@ -1016,6 +1017,22 @@ def cmd_check_resolution(args: argparse.Namespace) -> int:
     return _report(results, args.require_all)
 
 
+def cmd_check_review(args: argparse.Namespace) -> int:
+    path = Path(args.review)
+    if not path.is_file():
+        print(f"error: no such review: {path}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        review = load_artifact(path)
+    except (CapabilityError, LoadError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    rc = _validate_against(review, "review/1.0", path.name)
+    if rc is not None:
+        return rc
+    return _report(review_check(review), args.require_all)
+
+
 def cmd_withdrawals_check(args: argparse.Namespace) -> int:
     path = Path(args.withdrawals)
     if not path.is_file():
@@ -1524,6 +1541,21 @@ def build_parser() -> argparse.ArgumentParser:
     rst.add_argument("--review", help="attest/review.yaml; enables T-01 and T-02")
     rst.add_argument("--require-all", dest="require_all", action="store_true")
     rst.set_defaults(func=cmd_restate_check)
+
+    crv = sub.add_parser(
+        "check-review",
+        help="the RV rules over review.yaml",
+        description="What review/1.0 cannot state about itself. "
+                    "`reviewed_statement_pp` is nullable on purpose -- null is "
+                    "the honest way to record 'not captured' -- and it is also "
+                    "the value that makes a review silently un-carryable: "
+                    "restate returns not_checkable, C-10 fails at the next "
+                    "dependency bump, and nothing looks wrong until then.",
+    )
+    crv.add_argument("review", help="path to review.yaml")
+    crv.add_argument("--require-all", dest="require_all", action="store_true",
+                     help="treat any not_run rule as a failure")
+    crv.set_defaults(func=cmd_check_review)
 
     wd = sub.add_parser(
         "check-withdrawals",
