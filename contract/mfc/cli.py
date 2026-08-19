@@ -562,8 +562,28 @@ def cmd_conformance(args: argparse.Namespace) -> int:
               "check and this is not a clean run", file=sys.stderr)
         return EXIT_USAGE
 
+    # #646: restate evidence lets C-10 carry a review across an environment
+    # bump instead of failing it. Validated like every other input, because a
+    # malformed restate document deciding that a review survives would be worse
+    # than no restate document at all.
+    restate_doc = None
+    if getattr(args, "restate", None):
+        restate_path = Path(args.restate)
+        if not restate_path.is_file():
+            print(f"error: no such restate report: {restate_path}", file=sys.stderr)
+            return EXIT_USAGE
+        try:
+            restate_doc = load_artifact(restate_path)
+        except (LoadError, OSError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_USAGE
+        rc = _validate_against(restate_doc, "restate/1.0", restate_path.name)
+        if rc is not None:
+            return rc
+
     results = conformance_check(
         bundle, evidence,
+        restate=restate_doc,
         emission_path=Path(args.emission) if args.emission else None)
     rc = _report(results, args.require_all)
 
@@ -1268,6 +1288,10 @@ def build_parser() -> argparse.ArgumentParser:
     con.add_argument("--root", help="directory predicate file[] paths are "
                                     "relative to (default: the bundle's parent's parent)")
     con.add_argument("--emission", help="path to lean-emission.json; enables C-11")
+    con.add_argument("--restate", help="path to restate/1.0; lets C-10 carry a "
+                                       "review across an environment bump when "
+                                       "-- and only when -- the outcome is "
+                                       "`restated`")
     con.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     con.set_defaults(func=cmd_conformance)

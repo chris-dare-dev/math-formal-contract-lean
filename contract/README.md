@@ -419,6 +419,34 @@ There is one way to satisfy `C-05` without fixing anything — relabel the
 predicate as provisional. That is the intended escape, not a hole: relabelling
 *is* the retraction, and the table then shows a claim demoted to nothing.
 
+### `C-10` and the bump that invalidates every review at once
+
+`env_digest` hashes every package rev, so a single dependency bump rotates it
+while the mathematics sits still — and `C-10` then reports every human review
+as belonging to another environment. This is not a hypothetical. It happened to
+the **first review the consuming repository ever recorded**, hours after it was
+written: `MathFormalContract` moved `d3df3818 → 21e3b442`, `env_digest` went
+`45d9e8ca → 5b2b3d86`, and `C-10` failed while the reviewed statement's digest
+was byte-identical on both sides.
+
+`C-10` was right to fail — the review *was* performed elsewhere — and the wrong
+repair is to widen the rule or edit `reviewed_env_digest`, which is the one
+thing a review must never suffer silently.
+
+So `conformance --restate` supplies evidence instead. A review whose
+environment moved is carried forward when, and only when, the restate run says
+`restated` for its key. `changed` is a finding: the statement moved and the
+verdict describes something the declaration no longer says. A key the restate
+run does not mention is a finding too, because an omitted entry reads exactly
+like a checked one.
+
+`not_checkable` is a finding **worded as itself**. It is not reported as
+`changed`, because the two send a reviewer to different places, and collapsing
+them would hide a broken checker behind a pile of apparently-invalidated
+reviews. Carried-forward reviews are counted in the rule's reason rather than
+passing silently: a reader has to be able to tell a review performed here from
+one inherited across a bump.
+
 ### `C-12` and the vacuous pass, one level up
 
 Every other rule checks what is *present*. A bundle that simply omits its

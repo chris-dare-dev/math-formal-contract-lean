@@ -188,6 +188,7 @@ def check(
     evidence: list[Evidence],
     *,
     emission_path: Path | None = None,
+    restate: dict | None = None,
 ) -> list[RuleResult]:
     """Run C-01..C-12. Order is fixed so output is comparable run to run."""
     results: list[RuleResult] = []
@@ -360,13 +361,55 @@ def check(
         skip("C-10", "every human review is of this environment",
              "no readable environment predicate to compare against")
     else:
+        # A review of ANOTHER environment is stale unless a restate run says the
+        # statement is unchanged. Without `restate` this is the strict digest
+        # comparison it has always been; with it, `restated` -- AND ONLY
+        # `restated` -- carries a review forward.
+        #
+        # #646: env_digest hashes every package rev, so one dependency bump
+        # invalidates every review at once while the mathematics sits still. It
+        # did exactly that to the first review ever recorded. Carrying forward
+        # on evidence is the difference between that costing a re-read per
+        # review per bump and costing nothing.
         want = environment.get("env_digest")
-        add("C-10", "every human review is of this environment",
-            [Finding("C-10", f"{rev_e.predicate['file']}:{r.get('key')}",
-                     f"reviewed against env {str(r.get('reviewed_env_digest'))[:12]}..., "
+        by_key = {r.get("key"): r for r in (restate or {}).get("results", [])}
+        c10, carried = [], 0
+        for r in rev_e.document.get("reviews", []):
+            if r.get("reviewed_env_digest") == want:
+                continue
+            where = f"{rev_e.predicate['file']}:{r.get('key')}"
+            drift = (f"reviewed against env {str(r.get('reviewed_env_digest'))[:12]}..., "
                      f"this environment is {str(want)[:12]}...")
-             for r in rev_e.document.get("reviews", [])
-             if r.get("reviewed_env_digest") != want])
+            if restate is None:
+                c10.append(Finding("C-10", where, drift))
+                continue
+            entry = by_key.get(r.get("key"))
+            outcome = (entry or {}).get("outcome")
+            if outcome == "restated":
+                # Carried forward. Counted in the reason rather than passing
+                # silently: the reader must be able to tell a review performed
+                # here from one inherited across a bump.
+                carried += 1
+            elif outcome == "changed":
+                c10.append(Finding("C-10", where,
+                    f"{drift} and restate says `changed`: the statement moved, so "
+                    f"the review describes something the declaration no longer says"))
+            elif outcome == "not_checkable":
+                # NOT phrased as `changed`. The two send a reviewer to different
+                # places, and conflating them hides a broken checker behind a
+                # pile of apparently-invalidated reviews.
+                c10.append(Finding("C-10", where,
+                    f"{drift} and restate says `not_checkable` "
+                    f"({(entry or {}).get('reason') or 'no reason given'}): NOBODY "
+                    f"KNOWS whether the statement changed, so the review cannot be "
+                    f"carried forward -- this is not evidence that it did change"))
+            else:
+                c10.append(Finding("C-10", where,
+                    f"{drift} and the restate run does not mention this key; an "
+                    f"omitted entry reads exactly like a checked one"))
+        add("C-10", "every human review is of this environment", c10,
+            reason=(f"{carried} review(s) carried forward on a restate `restated`, "
+                    f"not performed in this environment" if carried else ""))
 
     # C-11 -- declarations describe the emission that shipped, not another one.
     dec = _by_kind(evidence, "declarations")
