@@ -122,6 +122,11 @@
     },
     "emitted_at": {
       "type": "string"
+    },
+    "source_git_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "$comment": "The commit of the source checkout this sweep describes, stamped by the emitter when the working directory is a git repository. Optional for backward compatibility with pre-1.1.0 emissions; when present, `mfc bundle` refuses an environment whose root_package.rev disagrees -- the artifact-level binding that stops a stale emission from being re-bundled at a different commit (derived-alg-geo-lean #628)."
     }
   },
   "$defs": {

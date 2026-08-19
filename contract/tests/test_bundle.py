@@ -182,3 +182,32 @@ def test_cli_validates_the_emission_before_using_it(tmp_path: Path) -> None:
                "--out", str(tmp_path / "d.json")])
     assert rc != EXIT_OK
     assert not (tmp_path / "d.json").exists(), "no output on invalid input"
+
+
+# --- the commit binding (derived-alg-geo-lean #628) ---------------------------
+
+def test_source_commit_mismatch_is_refused() -> None:
+    """An emission stamped at commit A must not bundle against commit B."""
+    em = _synthetic([_constant("A")])
+    em["source_git_commit"] = "a" * 40
+    env = _environment()
+    env["root_package"]["rev"] = "b" * 40
+    with pytest.raises(BundleError, match="produced at commit"):
+        build_declarations(em, env, VALID_DIR / "emission-1.0.json")
+
+
+def test_source_commit_match_bundles() -> None:
+    em = _synthetic([_constant("A")])
+    em["source_git_commit"] = "c" * 40
+    env = _environment()
+    env["root_package"]["rev"] = "c" * 40
+    out = build_declarations(em, env, VALID_DIR / "emission-1.0.json")
+    assert out["counts"]["total"] == 1
+
+
+def test_source_commit_absent_is_tolerated() -> None:
+    """A pre-1.1.0 emission carries no stamp; there is nothing to compare."""
+    em = _synthetic([_constant("A")])
+    em.pop("source_git_commit", None)
+    out = build_declarations(em, _environment(), VALID_DIR / "emission-1.0.json")
+    assert out["counts"]["total"] == 1
