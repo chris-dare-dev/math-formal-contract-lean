@@ -134,7 +134,24 @@ def restateOne (key : String) (decl : Name) (statementPp : String) :
   let some ci := env.find? decl
     | return { key, decl, outcome := .notCheckable,
                reason := s!"declaration {decl} is not in this environment" }
-  match ← elabStatement? statementPp with
+  -- BIND THE DECLARATION'S UNIVERSE PARAMETERS FIRST.
+  --
+  -- A universe-polymorphic statement mentions its level parameters by name --
+  -- `∀ {C : Type u_2} [inst : Category.{u_1, u_2} C] ...` -- and `elabTerm`
+  -- resolves those against `Term.Context.levelNames`, which is EMPTY for a
+  -- string parsed out of a review. Without this, every such statement returns
+  -- `not_checkable: elaboration threw: unknown universe level`, and the review
+  -- silently cannot be carried forward.
+  --
+  -- Found the only way it could be: the first real declaration put through this
+  -- was universe-polymorphic, and the fixture that had been exercising the path
+  -- since #188 was `∀ (n : Nat), n + 0 = n`, which has no universes at all.
+  --
+  -- The names come from the DECLARATION, not from the statement. A statement
+  -- inventing a level name the declaration does not have should not elaborate:
+  -- that is a different statement, and `isDefEq` is not the place to discover
+  -- it.
+  match ← withLevelNames ci.levelParams (elabStatement? statementPp) with
   | .error why => return { key, decl, outcome := .notCheckable, reason := why }
   | .ok e =>
     -- No `withTransparency .all`: it rescued zero cases in the spike, and every
