@@ -152,3 +152,78 @@ def test_review_carries_the_statement_the_human_read() -> None:
 
 def test_the_cli_runs() -> None:
     assert main(["restate-check", str(REPORT)]) == EXIT_OK
+
+
+# --- `mfc restate-plan`: the work-list that crosses into Lean ----------------
+#
+# Lean cannot read YAML, so the reviews cross as JSON. The rule that matters is
+# that the plan carries EVERY reviewed entry: a restate run which silently omits
+# one looks exactly like a run where that entry was fine, and the omission is
+# invisible in the counts because the counts come from the rows that are there.
+# That is T-01's hole, and the plan is where it would open.
+
+import json as _json
+from pathlib import Path as _Path
+
+from contract.mfc.cli import EXIT_OK, EXIT_USAGE, main as _main
+
+_VALID = _Path(__file__).resolve().parent.parent / "testdata" / "artifacts" / "valid"
+
+
+def _review_fixture() -> dict:
+    import yaml
+    return yaml.safe_load((_VALID / "review-1.0.json").read_text(encoding="utf-8")) \
+        if (_VALID / "review-1.0.json").suffix == ".yaml" \
+        else _json.loads((_VALID / "review-1.0.json").read_text(encoding="utf-8"))
+
+
+def _write_review(tmp_path: _Path, reviews: list[dict]) -> _Path:
+    p = tmp_path / "review.json"
+    p.write_text(_json.dumps({"schema_version": "review/1.0", "reviews": reviews},
+                             indent=2), encoding="utf-8")
+    return p
+
+
+def _one_review(**over) -> dict:
+    base = _review_fixture()["reviews"][0]
+    base.update(over)
+    return base
+
+
+def test_plan_carries_every_reviewed_entry(tmp_path: _Path) -> None:
+    a = _one_review(key="stmt:a520a8d4f877:a")
+    b = _one_review(key="stmt:a520a8d4f877:b", reviewed_statement_pp=None)
+    review = _write_review(tmp_path, [a, b])
+    out = tmp_path / "plan.json"
+    assert _main(["restate-plan", "--review", str(review), "--out", str(out)]) == EXIT_OK
+    plan = _json.loads(out.read_text(encoding="utf-8"))
+    assert [e["key"] for e in plan] == ["stmt:a520a8d4f877:a", "stmt:a520a8d4f877:b"]
+
+
+def test_an_entry_with_no_statement_is_kept_not_dropped(tmp_path: _Path) -> None:
+    """T-01's hole. An omitted row reads exactly like a checked one."""
+    review = _write_review(tmp_path, [_one_review(reviewed_statement_pp=None)])
+    out = tmp_path / "plan.json"
+    assert _main(["restate-plan", "--review", str(review), "--out", str(out)]) == EXIT_OK
+    plan = _json.loads(out.read_text(encoding="utf-8"))
+    assert len(plan) == 1
+    assert plan[0]["statement_pp"] is None
+
+
+def test_plan_says_out_loud_which_entries_have_no_statement(tmp_path: _Path, capsys) -> None:
+    review = _write_review(tmp_path, [_one_review(reviewed_statement_pp=None)])
+    _main(["restate-plan", "--review", str(review), "--out", str(tmp_path / "p.json")])
+    assert "NO STATEMENT" in capsys.readouterr().err
+
+
+def test_plan_validates_the_review_before_deriving_from_it(tmp_path: _Path) -> None:
+    bad = tmp_path / "review.json"
+    bad.write_text(_json.dumps({"schema_version": "review/1.0",
+                                "reviews": [{"key": "nope"}]}), encoding="utf-8")
+    assert _main(["restate-plan", "--review", str(bad),
+                  "--out", str(tmp_path / "p.json")]) != EXIT_OK
+
+
+def test_plan_refuses_a_missing_review(tmp_path: _Path) -> None:
+    assert _main(["restate-plan", "--review", str(tmp_path / "absent.yaml"),
+                  "--out", str(tmp_path / "p.json")]) == EXIT_USAGE

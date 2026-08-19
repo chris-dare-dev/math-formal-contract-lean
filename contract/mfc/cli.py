@@ -1046,6 +1046,45 @@ def cmd_withdrawals_check(args: argparse.Namespace) -> int:
     return rc
 
 
+def cmd_restate_plan(args: argparse.Namespace) -> int:
+    review_path = Path(args.review)
+    if not review_path.is_file():
+        print(f"error: no such review: {review_path}", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        review = load_artifact(review_path)
+    except (CapabilityError, LoadError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    rc = _validate_against(review, "review/1.0", review_path.name)
+    if rc is not None:
+        return rc
+
+    # EVERY reviewed entry, including one with no statement recorded. Dropping
+    # it would be T-01's hole: a restate run that silently omits an entry looks
+    # exactly like one where the entry was fine, and the omission is invisible
+    # in the counts because the counts come from the rows that are there. Lean
+    # returns not_checkable with a reason instead.
+    plan = [{"key": r.get("key"), "decl": r.get("decl"),
+             "statement_pp": r.get("reviewed_statement_pp")}
+            for r in review.get("reviews", [])]
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+
+    missing = [e["key"] for e in plan if not e["statement_pp"]]
+    print(f"wrote {out} -- {len(plan)} reviewed entr(ies)")
+    if missing:
+        # Said on stderr every run. A review with no statement recorded cannot
+        # be carried across an environment bump, and it looks complete until
+        # the bump arrives.
+        print(f"  NO STATEMENT  {len(missing)} entr(ies) record no "
+              f"reviewed_statement_pp and will come back not_checkable: "
+              f"{', '.join(missing)}", file=sys.stderr)
+    return EXIT_OK
+
+
 def cmd_restate_check(args: argparse.Namespace) -> int:
     path = Path(args.restate)
     if not path.is_file():
@@ -1459,6 +1498,21 @@ def build_parser() -> argparse.ArgumentParser:
     res.add_argument("--require-all", dest="require_all", action="store_true",
                      help="treat any not_run rule as a failure")
     res.set_defaults(func=cmd_check_resolution)
+
+    rsp = sub.add_parser(
+        "restate-plan",
+        help="turn review.yaml into the work-list the Lean checker reads",
+        description="Lean cannot read YAML and is not going to learn: the "
+                    "zero-dependency property is the argued exception that "
+                    "lets this package into a topic repo's environment, and "
+                    "spending it on a YAML parser would end the argument. So "
+                    "the reviews cross as JSON. Every reviewed entry is "
+                    "emitted, including one with no statement recorded -- an "
+                    "omitted row reads exactly like a checked one.",
+    )
+    rsp.add_argument("--review", required=True, help="path to review.yaml")
+    rsp.add_argument("--out", required=True, help="where to write the work-list")
+    rsp.set_defaults(func=cmd_restate_plan)
 
     rst = sub.add_parser(
         "restate-check",

@@ -171,4 +171,134 @@ def restateJson (results : Array RestateResult) (checkedAt : String) : Json :=
       ("reason", if r.reason.isEmpty then Json.null else Json.str r.reason)])
       |>.qsort (fun a b => (a.getObjValD "key").compress < (b.getObjValD "key").compress))]
 
+/-! ## The producer
+
+`restateOne` is the check. This is what runs it over a work-list and writes the
+`restate/1.0` artifact — the piece that was missing, and without which the
+check was reachable only from this package's own tests.
+
+### The work-list arrives as JSON, and that is not an accident
+
+The reviews live in `attest/review.yaml`. **Lean cannot read YAML**, and it is
+not going to learn: this package's zero-dependency property is the argued
+exception that lets it into a topic repo's environment at all, and spending it
+on a YAML parser would end the argument.
+
+So `mfc restate-plan` reads the reviews and writes `[{key, decl,
+statement_pp}]`. That is the same split the contract makes everywhere else —
+elaboration is Lean's, reading the verdict is `mfc`'s — and it keeps this file
+free of a format it has no business parsing.
+
+### A missing statement is `not_checkable`, never a missing row
+
+An entry whose `statement_pp` is null still appears in the results, as
+`not_checkable` with a reason. Dropping it would be `T-01`'s hole exactly: a
+run that silently omits an entry looks identical to one where that entry was
+fine, and the omission is invisible in the counts because the counts are
+computed from the rows that are there.
+
+### `maxHeartbeats` is finite on purpose
+
+An explicit rendering of a real statement runs to several kilobytes, so the
+default budget is raised. It is not set to `0`: an unbounded elaboration that
+hangs stops CI with no artifact and no diagnosis, while an exhausted budget
+surfaces through `elabStatement?` as `not_checkable` with the reason attached —
+which is a worse verdict and a far better failure. -/
+
+/-- One row of the work-list `mfc restate-plan` writes. -/
+private structure PlanEntry where
+  key : String
+  decl : Name
+  statementPp : Option String
+  deriving Inhabited
+
+private def planError (path : System.FilePath) (why : String) : String :=
+  s!"mfc-restate: {path}: {why}"
+
+/-- Read the work-list. Every failure is fatal: a plan that could not be read
+is not an empty plan, and writing `restate/1.0` with zero results would report
+that nothing needed checking. -/
+private def readPlan (path : System.FilePath) : IO (Array PlanEntry) := do
+  let text ← IO.FS.readFile path
+  let json ← IO.ofExcept <| (Json.parse text).mapError fun e =>
+    planError path s!"invalid JSON: {e}"
+  let arr ← IO.ofExcept <| json.getArr?.mapError fun _ =>
+    planError path "expected a JSON array of plan entries"
+  arr.mapM fun j => do
+    let key ← IO.ofExcept <| (j.getObjValAs? String "key").mapError fun _ =>
+      planError path "every entry needs a string `key`"
+    let decl ← IO.ofExcept <| (j.getObjValAs? String "decl").mapError fun _ =>
+      planError path s!"entry {key} needs a string `decl`"
+    -- Absent or null both mean "not captured". `.toOption` collapses them,
+    -- which is right: the outcome is the same and the reason names it.
+    pure { key, decl := decl.toName,
+           statementPp := (j.getObjValAs? String "statement_pp").toOption }
+
+private unsafe def restateToFileImpl (rootLib : Name) (additionalRoots : List Name)
+    (planPath : System.FilePath) (outPath : System.FilePath) : IO UInt32 := do
+  let plan ← readPlan planPath
+  initSearchPath (← findSysroot)
+  -- Both flags are load-bearing here for the same reasons `Emit` documents at
+  -- length, and one of them harder: elaborating a statement full of instance
+  -- binders needs the instance extension, and `loadExts := false` would supply
+  -- it EMPTY rather than absent. Every entry would come back `not_checkable`,
+  -- with a reason that looked like a real elaboration failure.
+  enableInitializersExecution
+  let imports := (rootLib :: additionalRoots).toArray.map
+    fun m => ({ module := m } : Import)
+  let env ← importModules imports {} (trustLevel := 0) (loadExts := true)
+  let checkedAt ← isoUtcNow
+  let work : TermElabM (Array RestateResult) := plan.mapM fun e =>
+    match e.statementPp with
+    | none => pure { key := e.key, decl := e.decl, outcome := .notCheckable,
+                     reason := "no reviewed_statement_pp recorded" }
+    | some pp => restateOne e.key e.decl pp
+  let ctx : Core.Context :=
+    { fileName := "<restate-check>", fileMap := default, maxHeartbeats := 1000000 }
+  -- `run'` twice: the Term and Meta states are scratch here, and naming
+  -- them only to discard them invites the nesting to drift.
+  let (results, _) ← work.run'.run'.toIO ctx { env }
+  if let some parent := outPath.parent then
+    IO.FS.createDirAll parent
+  IO.FS.writeFile outPath ((restateJson results checkedAt).pretty ++ "\n")
+  -- EXIT 0 WHATEVER THE OUTCOMES. This produces the record; `mfc
+  -- restate-check` is the gate that reads it. A producer that also judged
+  -- would put the verdict in the half of the seam that cannot be audited by
+  -- the other, and `changed` is not an error here -- it is the finding.
+  return 0
+
+/-- Import, check every reviewed statement, write `restate/1.0`.
+
+`opaque` over an `unsafe` implementation for the same reason `emitToFileForRoots`
+is: `importModules` is unsafe, and `unsafe def main` would push that into the
+handful of lines a topic repo generates. -/
+@[implemented_by restateToFileImpl]
+opaque restateToFile (rootLib : Name) (additionalRoots : List Name)
+    (planPath : System.FilePath) (outPath : System.FilePath) : IO UInt32
+
+private def restateUsage : String :=
+  "usage: <restate> --plan <path> [--out <path>]\n" ++
+  "  --plan <path>  work-list from `mfc restate-plan` (required)\n" ++
+  "  --out <path>   restate/1.0 destination (default: attest/restate.json)"
+
+/-- The entry point a topic repo calls. Mirrors `emitMainForRoots`. -/
+def restateMainForRoots (rootLib : Name) (additionalRoots : List Name)
+    (args : List String) : IO UInt32 := do
+  let mut out : System.FilePath := "attest/restate.json"
+  let mut plan : Option System.FilePath := none
+  let mut rest := args
+  repeat
+    match rest with
+    | "--plan" :: p :: tl => plan := some p; rest := tl
+    | "--out" :: p :: tl => out := p; rest := tl
+    | [] => break
+    | _ => IO.eprintln restateUsage; return 2
+  match plan with
+  | none => IO.eprintln restateUsage; return 2
+  | some p => restateToFile rootLib additionalRoots p out
+
+/-- Single-root topic repos. -/
+def restateMain (rootLib : Name) (args : List String) : IO UInt32 :=
+  restateMainForRoots rootLib [] args
+
 end MathFormalContract
