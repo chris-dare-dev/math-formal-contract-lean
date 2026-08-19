@@ -107,7 +107,11 @@ emitter is large enough to emit its own implementation: Lean's default is only
 
 Ambient options are *discarded* rather than extended, so a `set_option` in the
 caller cannot reach the emitted text. -/
-private def ppOpts : Options :=
+-- NOT private: `RestateCheck.captureStatement` builds the reviewer's rendering
+-- from these same options with `pp.explicit` flipped, and duplicating the list
+-- there would let the two drift. A capture rendered under different options
+-- than the emitter uses is a different string about the same declaration.
+def ppOpts : Options :=
   -- The width goes through the generic `Options.set`: `Options` is a structure
   -- with its own `setBool` but no `setNat` at this toolchain, and it is not a
   -- `KVMap`, so neither dot notation nor `KVMap.setNat` reaches a Nat.

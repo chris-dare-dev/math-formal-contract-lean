@@ -336,6 +336,28 @@ run_cmd Lean.Elab.Command.liftTermElabM do
   unless changed.outcome == .changed do
     throwError "expected changed, got {changed.outcome.toString} ({changed.reason})"
 
+  -- CAPTURE PROVES ITSELF. The rendering it returns must pass the very check
+  -- that will judge the review -- not an easier one. Capturing the first real
+  -- statement by hand failed three times (elision, printer-invented universe
+  -- names, and a verification that declared the universes it should have had
+  -- to resolve), and each failure produced a field that looked captured.
+  match ← captureStatement ``restateSubjectPoly with
+  | .error why => throwError "capture failed: {why}"
+  | .ok rendered =>
+    -- The declaration's OWN level name, not a printer-invented `u_1`.
+    let usesDeclLevelName := (rendered.splitOn "Type u").length > 1
+    unless usesDeclLevelName do
+      throwError "captured rendering does not use the declaration's level name: {rendered}"
+    -- And it round-trips through the real path.
+    let back ← restateOne "stmt:9f4c1a20b7d3:c" ``restateSubjectPoly rendered
+    unless back.outcome == .restated do
+      throwError "captured rendering did not restate: {back.outcome.toString} ({back.reason})"
+
+  -- A declaration that is not here yields an error, never an empty capture.
+  match ← captureStatement `NoSuchDeclarationAnywhere with
+  | .ok s => throwError "expected capture to fail for an absent declaration, got {s}"
+  | .error _ => pure ()
+
   -- NOT_CHECKABLE, parse: nobody knows whether it changed.
   let unparseable ← restateOne "stmt:9f4c1a20b7d3:x" ``restateSubject "∀ (n : Nat"
   unless unparseable.outcome == .notCheckable do

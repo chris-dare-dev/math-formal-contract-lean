@@ -419,6 +419,34 @@ There is one way to satisfy `C-05` without fixing anything — relabel the
 predicate as provisional. That is the intended escape, not a hole: relabelling
 *is* the retraction, and the table then shows a claim demoted to nothing.
 
+### Capturing `reviewed_statement_pp`, and why it proves itself
+
+`reviewed_statement_pp` is the string a review's survival depends on:
+`restateOne` parses it, elaborates it, and asks `isDefEq` against the
+declaration's current type. Every way of getting it wrong is **silent** — the
+field looks captured, `mfc validate` passes, and the failure appears at the
+next dependency bump as `not_checkable`, which reads like a broken tool rather
+than a bad capture.
+
+Capturing the first real one by hand took three attempts:
+
+1. **Elision.** `pp.explicit` alone left a `⋯` inside a proof argument.
+   `pp.proofs`, `pp.deepTerms` and a raised `pp.maxSteps` close it — which is
+   why the capture builds on `Emit.ppOpts` rather than its own list.
+2. **Invented universe names.** `#check @Decl` instantiates the constant with
+   fresh universe metavariables and prints them `u_1, u_2, u_3`; the
+   declaration's `levelParams` were `[w, u, u']`. `ci.type` carries the
+   declaration's own names, the term does not.
+3. **A verification easier than the real check** — a `universe u_1 u_2 u_3`
+   command above an `example`, supplying by hand the level context
+   `restateOne` does not have.
+
+So `--capture` renders, then puts the result through `restateOne` itself — the
+same parse, `elabTerm`, `isDefEq` and `withLevelNames` — and returns the string
+**only** on `restated`. All three failures produce a rendering that fails that
+check, so none can reach `review.yaml` through this path. A capture that cannot
+pass the check it exists to feed is not a capture.
+
 ### `C-10` and the bump that invalidates every review at once
 
 `env_digest` hashes every package rev, so a single dependency bump rotates it
