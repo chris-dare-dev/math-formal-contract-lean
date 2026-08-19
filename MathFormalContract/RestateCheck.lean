@@ -293,26 +293,120 @@ handful of lines a topic repo generates. -/
 opaque restateToFile (rootLib : Name) (additionalRoots : List Name)
     (planPath : System.FilePath) (outPath : System.FilePath) : IO UInt32
 
+
+/-! ## Capturing the statement a reviewer records
+
+`reviewed_statement_pp` is the string a review's survival depends on, and every
+way of getting it wrong is SILENT: the field looks captured, `mfc validate`
+passes, and the failure surfaces at the next dependency bump as
+`not_checkable`, which reads like a broken tool rather than a bad capture.
+
+Capturing the first one by hand took three attempts, with the schema, this
+file, and the emitter all open:
+
+* **Elision.** `pp.explicit` alone left a `⋯` inside a proof argument.
+  Unparseable. `pp.proofs`, `pp.deepTerms` and a raised `pp.maxSteps` close it
+  — which is why this builds on `Emit.ppOpts` rather than its own list.
+* **Invented universe names.** Rendering via `#check @Decl` instantiates the
+  constant with FRESH universe metavariables and prints them `u_1, u_2, u_3`.
+  The declaration's `levelParams` were `[w, u, u']`, so `restateOne` reported
+  `unknown universe level u_2`. `ci.type` carries the declaration's own names;
+  the term does not.
+* **A verification easier than the real check.** Both bad renderings were
+  checked with a `universe u_1 u_2 u_3` command above an `example`, which
+  supplies by hand the level context `restateOne` does not have.
+
+### So the capture proves itself
+
+`captureStatement` renders, then puts the result through `restateOne` — the
+same parse, the same `elabTerm`, the same `isDefEq`, the same
+`withLevelNames` — and returns the string ONLY on `restated`. All three
+failures above produce a rendering that fails that check, so none of them can
+reach `review.yaml` through this path.
+
+A capture that cannot pass the check it exists to feed is not a capture. -/
+
+/-- `Emit.ppOpts` with `pp.explicit := true`.
+
+The one deliberate difference. The emitter renders at `pp.explicit := false`
+because `type_pp` is for reading; a reviewer's statement is for RE-ELABORATING,
+and implicit arguments that a human infers an elaborator must be told. -/
+def capturePpOpts : Options := ppOpts.setBool `pp.explicit true
+
+/-- Render `decl`'s type as a reviewer would record it, and verify it. -/
+def captureStatement (decl : Name) : TermElabM (Except String String) := do
+  let some ci := (← getEnv).find? decl
+    | return .error s!"declaration {decl} is not in this environment"
+  -- `ci.type`, NEVER `#check @decl`: the type carries the declaration's own
+  -- level parameters, and the term carries fresh metavariables printed under
+  -- invented names that no level context can bind.
+  let rendered := toString (← withOptions (fun _ => capturePpOpts) (Meta.ppExpr ci.type))
+  -- The self-check. Not a second opinion -- literally the function the review
+  -- will be judged by, so a capture cannot pass here and fail there.
+  let verdict ← restateOne "stmt:000000000000:capture" decl rendered
+  match verdict.outcome with
+  | .restated => return .ok rendered
+  | outcome =>
+      return .error s!"capture did not verify: {outcome.toString} ({verdict.reason}).\n\
+        The rendering is NOT emitted. A statement that cannot be re-elaborated \
+        here cannot carry a review across an environment bump either."
+
+private unsafe def captureToFileImpl (rootLib : Name) (additionalRoots : List Name)
+    (decl : Name) (outPath : Option System.FilePath) : IO UInt32 := do
+  initSearchPath (← findSysroot)
+  enableInitializersExecution
+  let imports := (rootLib :: additionalRoots).toArray.map
+    fun m => ({ module := m } : Import)
+  let env ← importModules imports {} (trustLevel := 0) (loadExts := true)
+  let ctx : Core.Context :=
+    { fileName := "<capture>", fileMap := default, maxHeartbeats := 1000000 }
+  let (result, _) ← (captureStatement decl).run'.run'.toIO ctx { env }
+  match result with
+  | .error why => IO.eprintln s!"mfc-capture: {why}"; return 1
+  | .ok s =>
+    match outPath with
+    | none => IO.println s
+    | some p =>
+      if let some parent := p.parent then IO.FS.createDirAll parent
+      IO.FS.writeFile p (s ++ "\n")
+      IO.eprintln s!"mfc-capture: wrote {p} -- {s.length} chars, verified restated"
+    return 0
+
+@[implemented_by captureToFileImpl]
+opaque captureToFile (rootLib : Name) (additionalRoots : List Name)
+    (decl : Name) (outPath : Option System.FilePath) : IO UInt32
+
 private def restateUsage : String :=
   "usage: <restate> --plan <path> [--out <path>]\n" ++
-  "  --plan <path>  work-list from `mfc restate-plan` (required)\n" ++
-  "  --out <path>   restate/1.0 destination (default: attest/restate.json)"
+  "       <restate> --capture <decl> [--out <path>]\n" ++
+  "  --plan <path>     work-list from `mfc restate-plan`\n" ++
+  "  --capture <decl>  render one declaration's statement as a reviewer would\n" ++
+  "                    record it, verified by the same check that will judge\n" ++
+  "                    it; prints to stdout unless --out is given\n" ++
+  "  --out <path>      destination (default: attest/restate.json, or stdout\n" ++
+  "                    for --capture)"
 
 /-- The entry point a topic repo calls. Mirrors `emitMainForRoots`. -/
 def restateMainForRoots (rootLib : Name) (additionalRoots : List Name)
     (args : List String) : IO UInt32 := do
-  let mut out : System.FilePath := "attest/restate.json"
+  let mut out : Option System.FilePath := none
   let mut plan : Option System.FilePath := none
+  let mut capture : Option Name := none
   let mut rest := args
   repeat
     match rest with
     | "--plan" :: p :: tl => plan := some p; rest := tl
-    | "--out" :: p :: tl => out := p; rest := tl
+    | "--capture" :: d :: tl => capture := some d.toName; rest := tl
+    | "--out" :: p :: tl => out := some p; rest := tl
     | [] => break
     | _ => IO.eprintln restateUsage; return 2
-  match plan with
-  | none => IO.eprintln restateUsage; return 2
-  | some p => restateToFile rootLib additionalRoots p out
+  match plan, capture with
+  -- Both would be two jobs sharing one exit code, and the failure of one would
+  -- be indistinguishable from the failure of the other.
+  | some _, some _ => IO.eprintln restateUsage; return 2
+  | some p, none => restateToFile rootLib additionalRoots p (out.getD "attest/restate.json")
+  | none, some d => captureToFile rootLib additionalRoots d out
+  | none, none => IO.eprintln restateUsage; return 2
 
 /-- Single-root topic repos. -/
 def restateMain (rootLib : Name) (args : List String) : IO UInt32 :=
