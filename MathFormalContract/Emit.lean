@@ -152,6 +152,24 @@ def isoUtcNow : IO String := do
   return s!"{dt.date.year.toInt}-{pad2 dt.date.month.toNat}-{pad2 dt.date.day.toNat}\
 T{pad2 dt.time.hour.toNat}:{pad2 dt.time.minute.toNat}:{pad2 dt.time.second.toNat}Z"
 
+/-- The commit of the source checkout this sweep describes, or `none` when the
+working directory is not a git repository.
+
+Never an error: provenance binding is `mfc bundle`'s gate (it refuses an
+environment whose `root_package.rev` disagrees with this stamp), and an honest
+artifact must still be produced outside a checkout -- the field is simply
+omitted and `bundle` has nothing to compare. The 40-hex check keeps a
+misconfigured `git` from stamping an error message as a commit. -/
+def sourceGitCommitNow : IO (Option String) := do
+  try
+    let out ← IO.Process.output { cmd := "git", args := #["rev-parse", "HEAD"] }
+    if out.exitCode != 0 then return none
+    let s := out.stdout.trim
+    if s.length == 40 && s.toList.all (fun c => c.isDigit || ('a' ≤ c && c ≤ 'f')) then
+      return some s
+    return none
+  catch _ => return none
+
 /-! ## The sweep -/
 
 /-- Sort a `Name` array by its **string** spelling and drop duplicates.
@@ -370,7 +388,8 @@ same generated file that a topic's `lakefile.toml` is rendered beside, and
 `mfc lint` cross-checks the two. -/
 def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
     (externals : Array Name)
-    (leanOptions : List (String × Json)) (emittedAt : String) : MetaM (Json × Nat) := do
+    (leanOptions : List (String × Json)) (emittedAt : String)
+    (sourceGitCommit : Option String := none) : MetaM (Json × Nat) := do
   let env ← getEnv
   let allMods := env.header.moduleNames
   let roots := rootLib :: additionalRoots
@@ -448,9 +467,15 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
     st := st.add delta
   -- Iteration order over modules and their constant lists is not specified.
   let sortedOut := (out.qsort fun a b => a.1 < b.1).map (·.2)
-  let doc := Json.mkObj [
+  -- `source_git_commit` sits with the other provenance fields, not after
+  -- `emitted_at`: `emitted_at` stays the single volatile field so the
+  -- two-sweep determinism gate keeps comparing everything else byte-for-byte.
+  let provenance := match sourceGitCommit with
+    | some c => [("source_git_commit", Json.str c)]
+    | none => []
+  let doc := Json.mkObj <| [
     ("schema_version",  Json.str "emission/1.0"),
-    ("emitter_version", Json.str "mfc-emit/1.0.0"),
+    ("emitter_version", Json.str "mfc-emit/1.1.0"),
     ("lean_version",    Json.str Lean.versionString),
     ("lean_githash",    Json.str Lean.githash),
     ("lean_options",    Json.mkObj leanOptions),
@@ -466,14 +491,15 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
         ("private",    Json.num st.privateN),
         ("external",   Json.num st.external),
         ("foreign",    Json.num st.foreign)]),
-    ("constants",  Json.arr sortedOut),
-    ("emitted_at", Json.str emittedAt)]
+    ("constants",  Json.arr sortedOut)]
+    ++ provenance ++ [("emitted_at", Json.str emittedAt)]
   return (doc, st.sorryN)
 
 /-- Build `emission/1.0` for a conventional single-root library. -/
 def emitJson (rootLib : Name) (leanOptions : List (String × Json))
-    (emittedAt : String) : MetaM (Json × Nat) :=
-  emitJsonForRoots rootLib [] #[] leanOptions emittedAt
+    (emittedAt : String) (sourceGitCommit : Option String := none) :
+    MetaM (Json × Nat) :=
+  emitJsonForRoots rootLib [] #[] leanOptions emittedAt sourceGitCommit
 
 /-! ## Driver -/
 
@@ -510,6 +536,7 @@ private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : Li
   let env ← importModules #[{ module := rootLib }] {}
     (trustLevel := 0) (loadExts := true)
   let emittedAt ← isoUtcNow
+  let sourceGitCommit ← sourceGitCommitNow
   -- `maxHeartbeats := 0`, i.e. unlimited, and it is not laziness.
   --
   -- The default 200000 is a guard against runaway ELABORATION — a proof that
@@ -533,7 +560,7 @@ private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : Li
   let result ← try
       let ((doc, sorryN), _, _) ←
         (emitJsonForRoots rootLib additionalRoots externals leanOptions
-          emittedAt).toIO ctx coreSt
+          emittedAt sourceGitCommit).toIO ctx coreSt
       pure (Except.ok (doc, sorryN))
     catch e => pure (Except.error (toString e))
   match result with

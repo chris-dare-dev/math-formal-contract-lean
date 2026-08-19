@@ -113,6 +113,22 @@ def compute_statement_digests(emission: dict) -> dict[str, str]:
 
 def build_declarations(emission: dict, environment: dict, emission_path: Path) -> dict:
     """The `declarations/1.0` document."""
+    # The artifact-level commit binding (derived-alg-geo-lean #628). Without
+    # it, an emission generated at commit A re-bundled with a fresh
+    # environment at commit B yields a bundle whose subject is B and whose
+    # declaration content describes A -- every rule green. Ordering inside one
+    # CI job was the only protection. Both fields optional-tolerant: an old
+    # emission (no stamp) or an environment without root_package.rev simply
+    # has nothing to compare, and seal's own 40-hex validation still applies
+    # downstream.
+    stamped = emission.get("source_git_commit")
+    env_rev = (environment.get("root_package") or {}).get("rev")
+    if stamped is not None and env_rev is not None and stamped != env_rev:
+        raise BundleError(
+            f"the emission was produced at commit {stamped} but the "
+            f"environment describes {env_rev}; a bundle would attest one "
+            f"commit with the other's declaration content. Regenerate the "
+            f"emission at the current checkout.")
     policy = set(environment["axiom_policy"]["allowlist"]) | {
         a["axiom"] for a in environment["axiom_policy"]["additions"]
     }
