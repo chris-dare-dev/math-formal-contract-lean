@@ -293,6 +293,18 @@ run_cmd Lean.Elab.Command.liftTermElabM do
 `pp.explicit := true` is what a reviewer would have recorded. -/
 theorem restateSubject (n : Nat) : n + 0 = n := Nat.add_zero n
 
+-- `universe` explicitly: this package sets `autoImplicit = false` and
+-- `relaxedAutoImplicit = false`, so `u` is not auto-bound.
+universe u
+
+/-- A UNIVERSE-POLYMORPHIC subject. `restateSubject` has no universes at all,
+so it exercised the checker without ever asking whether a level parameter
+resolves -- and the first real declaration put through `restateOne` was
+polymorphic and came back `not_checkable: unknown universe level`. A review
+that cannot be carried forward, reported as a tooling failure, on a statement
+that had not changed. -/
+theorem restateSubjectPoly {α : Type u} (a : α) : a = a := rfl
+
 open MathFormalContract in
 run_cmd Lean.Elab.Command.liftTermElabM do
   -- RESTATED: the statement as written elaborates and is defeq.
@@ -300,6 +312,23 @@ run_cmd Lean.Elab.Command.liftTermElabM do
     "∀ (n : Nat), n + 0 = n"
   unless ok.outcome == .restated do
     throwError "expected restated, got {ok.outcome.toString} ({ok.reason})"
+
+  -- RESTATED, UNIVERSE-POLYMORPHIC. The level parameter must resolve against
+  -- the declaration's own `levelParams`; with an empty level context this
+  -- returns not_checkable and the review dies silently on the next bump.
+  let poly ← restateOne "stmt:9f4c1a20b7d3:u" ``restateSubjectPoly
+    "∀ {α : Type u} (a : α), a = a"
+  unless poly.outcome == .restated do
+    throwError "expected restated for a universe-polymorphic statement, got \
+      {poly.outcome.toString} ({poly.reason})"
+
+  -- A level name the DECLARATION does not have must not resolve. Binding the
+  -- statement's names instead of the declaration's would make this pass.
+  let bogusLevel ← restateOne "stmt:9f4c1a20b7d3:u" ``restateSubjectPoly
+    "∀ {α : Type v} (a : α), a = a"
+  unless bogusLevel.outcome == .notCheckable do
+    throwError "expected not_checkable for an unbound level name, got \
+      {bogusLevel.outcome.toString}"
 
   -- CHANGED: elaborates fine, different statement. The review is invalidated.
   let changed ← restateOne "stmt:9f4c1a20b7d3:x" ``restateSubject
