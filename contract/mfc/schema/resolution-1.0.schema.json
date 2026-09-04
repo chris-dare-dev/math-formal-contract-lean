@@ -279,7 +279,7 @@
           }
         },
         {
-          "$comment": "`quote_containment` may read `current`, and that is the whole point of the rung: containment is an IDENTITY claim -- the statement is in the chunk or it is not -- where `fuzzy` is an estimate. It still owes the same evidence as any other current result (the first conditional above), and it must carry NO similarity score: a number there would invite exactly the reading that this is a near-miss.",
+          "$comment": "`quote_containment` may read `current`, and that is the whole point of the rung: containment is an IDENTITY claim -- the statement is in the chunk or it is not -- where `fuzzy` is an estimate. It still owes the same evidence as any other current result (the first conditional above), and it must carry NO similarity score: a number there would invite exactly the reading that this is a near-miss. `not_applicable` is in the list because the version guard is orthogonal to the rung: an entry found by containment in a corpus that cannot name its arXiv version is withheld for the same reason one found by byte-equality is, and excluding it here would have forced the resolver to misreport the rung it actually used.",
           "if": {
             "properties": {
               "matched_by": {
@@ -296,7 +296,8 @@
                 "enum": [
                   "current",
                   "drifted",
-                  "unresolvable"
+                  "unresolvable",
+                  "not_applicable"
                 ]
               },
               "similarity": {
