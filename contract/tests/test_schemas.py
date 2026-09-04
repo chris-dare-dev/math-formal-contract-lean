@@ -26,6 +26,12 @@ SCHEMA_DIR = HERE.parent / "mfc" / "schema"
 VALID_DIR = HERE.parent / "testdata" / "artifacts" / "valid"
 INVALID_DIR = HERE.parent / "testdata" / "artifacts" / "invalid"
 
+#: Rejection fixtures whose assertion lives in another test module, so
+#: `test_every_rejection_fixture_is_registered` does not report them as
+#: unclaimed. `not-checkable-without-reason` is `restate/1.0`'s and is
+#: asserted through the CLI in `tests/test_restate.py`.
+_REJECTIONS_OWNED_ELSEWHERE = {"not-checkable-without-reason"}
+
 #: Which schema each rejection fixture is aimed at, and the rule it must trip.
 REJECTIONS = {
     "sorry-laundered": ("declarations-1.0",
@@ -34,6 +40,12 @@ REJECTIONS = {
         "a fuzzy match may never be `current`"),
     "current-without-digest": ("resolution-1.0",
         "`current` requires a recomputed body digest"),
+    "containment-with-similarity": ("resolution-1.0",
+        "a containment match may carry no similarity score"),
+    "not-applicable-without-reason": ("resolution-1.0",
+        "`not_applicable` must say why it declines"),
+    "not-applicable-with-version": ("resolution-1.0",
+        "`not_applicable` may not name a resolved source version"),
     "exact-with-divergence": ("review-1.0",
         "`exact` confirmed alongside a stated divergence"),
     "divergent-without-divergence": ("review-1.0",
@@ -128,6 +140,40 @@ def test_rejection_fixture_is_rejected(fixture: str, expected: tuple[str, str]) 
     doc.pop("$comment_fixture", None)
     errors = list(jsonschema.Draft202012Validator(_schema(schema_name)).iter_errors(doc))
     assert errors, f"{schema_name} accepted {fixture!r}; the rule is not firing: {rule}"
+
+
+def test_every_rejection_fixture_is_registered() -> None:
+    """A fixture named by no rule is a fixture that proves the wrong thing.
+
+    `test_validate.py` already parametrizes over this directory, so every file
+    here is asserted to FAIL the CLI. That is a weaker claim than it looks:
+    `additionalProperties: false` rejects any document for a typo, so "the CLI
+    said no" does not establish that the rule the fixture was written for is
+    the rule that fired. `REJECTIONS` is where a fixture is bound to its rule,
+    and `containment-with-similarity.json` sat outside it from the day it was
+    written. Registering it is the fix; this test is what stops the next one
+    from going the same way.
+    """
+    on_disk = {p.stem for p in INVALID_DIR.glob("*.json")}
+    unclaimed = on_disk - set(REJECTIONS) - _REJECTIONS_OWNED_ELSEWHERE
+    assert not unclaimed, (
+        f"rejection fixture(s) {sorted(unclaimed)} are asserted on by nothing")
+
+
+def test_resolution_counts_has_one_key_per_enum_member() -> None:
+    """The summary must be able to express every state a result can be in.
+
+    `counts` is how a reader learns the shape of a run without walking
+    `results`, so an enum member with no counts key is a state the summary
+    swallows: entries in it are simply missing from every total. Derived from
+    the schema rather than listed, so adding a member without its key fails
+    here instead of silently under-reporting in CI.
+    """
+    schema = _schema("resolution-1.0")
+    members = set(schema["$defs"]["result"]["properties"]["resolution"]["enum"])
+    counted = set(schema["properties"]["counts"]["properties"])
+    assert members == counted
+    assert set(schema["properties"]["counts"]["required"]) == members
 
 
 def test_emission_fixture_is_real_emitter_output() -> None:

@@ -501,6 +501,28 @@ def test_coverage_keeps_reviewed_and_resolved_apart() -> None:
     assert "score" not in c._fields and "ratio" not in c._fields
 
 
+def test_a_not_applicable_resolution_is_not_counted_as_resolved() -> None:
+    """The corpus axis gets the same treatment the review axes already get.
+
+    `coverage()` tested `!= NOT_RUN`, which was correct while `not_applicable`
+    could only appear on a review cell. `resolution/1.0` now carries it too --
+    a byte-equal match against a corpus that records no arXiv version is no
+    evidence for the `vN` an entry pins -- and counting it as resolved would
+    report the soundness hole as coverage, which is precisely what the
+    `reviewed` line already refuses to do.
+    """
+    decls = _declarations([
+        _decl("Topic.a", DIGEST_A, [_cite(KEY_A)]),
+        _decl("Topic.b", DIGEST_B, [_cite(KEY_B)]),
+    ])
+    c = coverage(claim_table(
+        decls,
+        resolution=_resolution(_result(KEY_A),
+                               _result(KEY_B, resolution=NOT_APPLICABLE)),
+        environment=_environment()))
+    assert (c.bindings, c.resolved) == (2, 1)
+
+
 def test_a_declaration_citing_two_keys_yields_two_rows() -> None:
     decls = _declarations([_decl("Topic.thm", DIGEST_A,
                                  [_cite(KEY_A), _cite(KEY_B)])])

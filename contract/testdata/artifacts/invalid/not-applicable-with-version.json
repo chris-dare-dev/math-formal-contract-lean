@@ -1,0 +1,32 @@
+{
+  "schema_version": "resolution/1.0",
+  "registry_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "notebook": "bridgeland-stability",
+  "corpus_version": 5048,
+  "corpus_manifest_content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+  "resolver_version": "arxmcp/statement_resolve.py@1.0.0",
+  "chunker_version": "chunker/2.3.0",
+  "generated_at": "2026-08-04T08:55:10Z",
+  "results": [
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.def-1.1",
+      "resolution": "not_applicable",
+      "matched_by": "quote_sha256",
+      "chunk_id": "arxiv:math/0212237:5f1b90c2e6a4118d",
+      "resolved_source_version": "v3",
+      "matched_body_sha256": "ebacfe5caa6c1df8229ec6bfbcf55f855a524a77cf78a9fb3171b81172d6f50d",
+      "printed_number": "1.1",
+      "similarity": null,
+      "reason": "The quote is byte-equal to a chunk of this paper, but the entry declares source.version v3 and documents.arxiv_version is '' for every row of this notebook. Calling that `current` would assert a v3 pin confirmed by bytes of unknown version."
+    }
+  ],
+  "counts": {
+    "current": 0,
+    "drifted": 0,
+    "unresolvable": 0,
+    "paper_absent": 0,
+    "not_applicable": 1,
+    "not_run": 0
+  },
+  "$comment_fixture": "REJECTION FIXTURE. A not_applicable result that names the very version whose absence is the only reason to emit not_applicable. If the resolver could establish v3 it owed a verdict, not an abstention."
+}
