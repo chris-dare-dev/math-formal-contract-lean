@@ -55,11 +55,13 @@
     "counts": {
       "type": "object",
       "additionalProperties": false,
+      "$comment": "One key per member of the `resolution` enum, and `tests/test_schemas.py` asserts that correspondence structurally -- an enum member with no counts key is a state the summary silently swallows.",
       "required": [
         "current",
         "drifted",
         "unresolvable",
         "paper_absent",
+        "not_applicable",
         "not_run"
       ],
       "properties": {
@@ -76,6 +78,10 @@
           "minimum": 0
         },
         "paper_absent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_applicable": {
           "type": "integer",
           "minimum": 0
         },
@@ -112,8 +118,10 @@
             "drifted",
             "unresolvable",
             "paper_absent",
+            "not_applicable",
             "not_run"
-          ]
+          ],
+          "$comment": "`not_applicable` is the resolver declining to adjudicate, and it is kept apart from `not_run` because the remedies differ -- `not_run` is closed by running the resolver, `not_applicable` by fixing the corpus. It is the value ADR-0003 and ADR-0005 already name (`pass`/`fail`/`not_run`/`not_applicable`), and arXMCP's CLAUDE.md 4.10 rule 3 binds the same spelling across the seam. Its live case: `documents.arxiv_version` is '' for every row in every notebook, so a `current` verdict for an entry declaring `version: vN` would assert a vN pin confirmed by bytes of unknown version. A byte-equal match against an unversioned corpus is not weak evidence for that pin -- it is no evidence for it."
         },
         "matched_by": {
           "enum": [
@@ -239,6 +247,33 @@
                 "enum": [
                   "drifted"
                 ]
+              }
+            }
+          }
+        },
+        {
+          "$comment": "`not_applicable` must SAY why it declines, and it may never name a source version. The reason is what separates it from `not_run` for a reader: one means nobody ran the resolver, the other means the resolver ran and the corpus could not answer. And `resolved_source_version` is precisely the field whose absence forces this state -- a result that both declines on version grounds and names a version is incoherent.",
+          "if": {
+            "properties": {
+              "resolution": {
+                "const": "not_applicable"
+              }
+            },
+            "required": [
+              "resolution"
+            ]
+          },
+          "then": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "resolved_source_version": {
+                "type": "null"
               }
             }
           }

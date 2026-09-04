@@ -40,6 +40,17 @@
       "printed_number": "8.2",
       "similarity": null,
       "reason": "The chunker merged this statement's chunk with the following one; the quote is still present, so this is current by containment rather than by byte-equality."
+    },
+    {
+      "key": "stmt:9f4c1a20b7d3:bridgeland2007.def-1.1",
+      "resolution": "not_applicable",
+      "matched_by": "quote_sha256",
+      "chunk_id": "arxiv:math/0212237:5f1b90c2e6a4118d",
+      "resolved_source_version": null,
+      "matched_body_sha256": "ebacfe5caa6c1df8229ec6bfbcf55f855a524a77cf78a9fb3171b81172d6f50d",
+      "printed_number": "1.1",
+      "similarity": null,
+      "reason": "The quote is byte-equal to a chunk of this paper, but the entry declares source.version v3 and documents.arxiv_version is '' for every row of this notebook. Calling that `current` would assert a v3 pin confirmed by bytes of unknown version."
     }
   ],
   "counts": {
@@ -47,6 +58,7 @@
     "drifted": 0,
     "unresolvable": 0,
     "paper_absent": 0,
-    "not_run": 1
+    "not_run": 1,
+    "not_applicable": 1
   }
 }

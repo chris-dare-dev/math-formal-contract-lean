@@ -89,6 +89,14 @@ NOT_RUN = "not_run"
 #: producer. This is the consumer's question -- given a record I did not build,
 #: what does it tell me about the environment I hold? -- and its answer is
 #: "nothing about this one".
+#:
+#: The review axes were its first user; the CORPUS axis is its second.
+#: `resolution/1.0` gained the same value for the same reason -- a byte-equal
+#: match against a corpus that records no arXiv version is no evidence for the
+#: `vN` an entry pins -- so `coverage()` must exclude it from `resolved` exactly
+#: as it already excludes it from `reviewed`. Counting it would restate the
+#: soundness hole as a statistic, which is the failure this constant exists to
+#: prevent.
 NOT_APPLICABLE = "not_applicable"
 
 
@@ -435,7 +443,8 @@ def coverage(rows: Iterable[Row]) -> Coverage:
         keys=len({r.key for r in rows}),
         reviewed=sum(1 for r in rows
                      if r.faithfulness not in (NOT_RUN, NOT_APPLICABLE)),
-        resolved=sum(1 for r in rows if r.resolution != NOT_RUN),
+        resolved=sum(1 for r in rows
+                     if r.resolution not in (NOT_RUN, NOT_APPLICABLE)),
         frontier_open=sum(1 for r in rows if r.frontier != "-"),
         review_not_applicable=sum(1 for r in rows
                                   if r.faithfulness == NOT_APPLICABLE),
