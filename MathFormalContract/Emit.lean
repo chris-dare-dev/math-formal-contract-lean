@@ -106,7 +106,20 @@ emitter is large enough to emit its own implementation: Lean's default is only
 5,000 visited expressions, after which it inserts `⋯` into a definition body.
 
 Ambient options are *discarded* rather than extended, so a `set_option` in the
-caller cannot reach the emitted text. -/
+caller cannot reach the emitted text.
+
+That discarding is why `maxRecDepth` has to be set **here** and not only on the
+emitter's `Core.Context`. `Core.withOptions` recomputes the field from the
+options it is handed — `maxRecDepth := maxRecDepth.get options` — so entering
+this block with a fresh `Options` silently restores the *option* default for
+exactly the `ppExpr` call that needs the raised one. Measured, not assumed:
+`maxRecDepth.get ({} : Options)` is 512, where the `Core.Context` field it
+replaces defaults to 1000 — so entering the block did not merely fail to raise
+the depth, it lowered it. Setting the context field alone therefore looked
+right and did nothing: derived-alg-geo-lean still failed with `maximum
+recursion depth has been reached` on a build whose log shows it checked out
+the commit that set it. Zero is Lean's documented no-limit sentinel for this
+option, and `withIncRecDepth` special-cases it (`max != 0 && curr == max`). -/
 -- NOT private: `RestateCheck.captureStatement` builds the reviewer's rendering
 -- from these same options with `pp.explicit` flipped, and duplicating the list
 -- there would let the two drift. A capture rendered under different options
@@ -124,6 +137,10 @@ def ppOpts : Options :=
     |>.setBool `pp.deepTerms true
     |>.set     `pp.maxSteps  (1000000 : Nat)
     |>.set     `format.width (120 : Nat)
+    -- Through the registered option's own `set` rather than a raw key: it is
+    -- the same accessor `Core.withOptions` reads the field back with, so the
+    -- two cannot drift on a typo the way a quoted name could.
+    |> (Lean.maxRecDepth.set · 0)
 
 /-- The same options as data, for the `pp_options` record. Written from one
 source so the artifact cannot claim a setting the emitter did not use. -/
@@ -136,7 +153,8 @@ private def ppOptsJson : Json :=
     ("pp.proofs",    Json.bool true),
     ("pp.deepTerms", Json.bool true),
     ("pp.maxSteps",  Json.num 1000000),
-    ("format.width", Json.num 120)]
+    ("format.width", Json.num 120),
+    ("maxRecDepth",  Json.num 0)]
 
 /-! ## Timestamps -/
 
@@ -677,13 +695,19 @@ private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : Li
   -- The same distinction applies to recursion depth. Deeply nested
   -- declaration values are finite input already accepted by Lean, but
   -- traversing and pretty-printing them can exceed `Core.Context`'s default
-  -- depth of 1000. Keep this override local to the emitter's fresh runtime
-  -- context; it is not an elaboration option claimed by the artifact.
-  -- derived-alg-geo-lean exceeded 10000 in three combined-emission CI runs.
-  -- Zero is Lean's no-limit sentinel; any finite bound would make input size a
-  -- completeness ceiling. This removes Lean's logical recursion guard and can
-  -- still exhaust the native stack, but a failure remains confined to this
-  -- fresh emitter process rather than producing a partial artifact.
+  -- depth of 1000. derived-alg-geo-lean exceeded 10000 in three
+  -- combined-emission CI runs. Zero is Lean's no-limit sentinel; any finite
+  -- bound would make input size a completeness ceiling. This removes Lean's
+  -- logical recursion guard and can still exhaust the native stack, but a
+  -- failure remains confined to this fresh emitter process rather than
+  -- producing a partial artifact.
+  --
+  -- SETTING IT HERE IS NOT ENOUGH, and that is worth stating because the
+  -- first attempt did only this and looked correct. `emitOne` renders every
+  -- type through `withOptions (fun _ => ppOpts)`, and `Core.withOptions`
+  -- rebuilds the field from whatever options it is handed. The deep work is
+  -- inside that block, so it runs at `ppOpts`'s depth, not this one.
+  -- `ppOpts` therefore carries `maxRecDepth` too; keep the two together.
   let ctx : Core.Context :=
     { fileName := "<mfc-emit>", fileMap := default, options := {}
       maxHeartbeats := 0
