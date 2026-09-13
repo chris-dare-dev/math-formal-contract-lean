@@ -673,9 +673,16 @@ private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : Li
   -- complete record into no record is not a safety feature.
   --
   -- Wall-clock is the caller's control, and CI's, not this option's.
+  --
+  -- The same distinction applies to recursion depth. Deeply nested
+  -- declaration values are finite input already accepted by Lean, but
+  -- traversing and pretty-printing them can exceed `Core.Context`'s default
+  -- depth of 1000. Keep this override local to the emitter's fresh runtime
+  -- context; it is not an elaboration option claimed by the artifact.
   let ctx : Core.Context :=
     { fileName := "<mfc-emit>", fileMap := default, options := {}
-      maxHeartbeats := 0 }
+      maxHeartbeats := 0
+      maxRecDepth := 10000 }
   let coreSt : Core.State := { env }
   let tEmit0 ← IO.monoNanosNow
   let result ← try
