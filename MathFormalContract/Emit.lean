@@ -679,10 +679,15 @@ private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : Li
   -- traversing and pretty-printing them can exceed `Core.Context`'s default
   -- depth of 1000. Keep this override local to the emitter's fresh runtime
   -- context; it is not an elaboration option claimed by the artifact.
+  -- derived-alg-geo-lean exceeded 10000 in three combined-emission CI runs.
+  -- Zero is Lean's no-limit sentinel; any finite bound would make input size a
+  -- completeness ceiling. This removes Lean's logical recursion guard and can
+  -- still exhaust the native stack, but a failure remains confined to this
+  -- fresh emitter process rather than producing a partial artifact.
   let ctx : Core.Context :=
     { fileName := "<mfc-emit>", fileMap := default, options := {}
       maxHeartbeats := 0
-      maxRecDepth := 10000 }
+      maxRecDepth := 0 }
   let coreSt : Core.State := { env }
   let tEmit0 ← IO.monoNanosNow
   let result ← try
