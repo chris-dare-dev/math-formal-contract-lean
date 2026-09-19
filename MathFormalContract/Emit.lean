@@ -244,6 +244,66 @@ private def Stats.add (a b : Stats) : Stats where
   external  := a.external + b.external
   foreign   := a.foreign + b.foreign
 
+/-! ## Phase timing
+
+Nanosecond subtotals for the sweep. They go to **stderr and nowhere else**.
+Putting them in `emission/1.0` would rotate `emission_sha256`, break the
+two-sweep determinism gate the moment a clock ticks differently between runs,
+and place a measurement of the MACHINE inside a record about the REPOSITORY.
+Timings are operations telemetry, not evidence, and the two do not share a file.
+
+**Forcing is the entire difficulty, and a timer that does not force reads
+zero.** Lean evaluates `PrettyPrinter.ppExpr`'s result lazily. A draft of this
+instrumentation reported the whole sweep at single-digit milliseconds and
+attributed the cost to `Json.pretty` in the driver -- which is where the thunks
+were being demanded, not where the work belonged. Every counter below is
+therefore paired with a SIZE, and computing that size is what demands the
+thunk: `String.length` walks the UTF-8 bytes (`utf8ByteSize` would not, being
+O(1) off the header), and `Array.size` demands the array `qsort` had to build.
+Reporting the sizes is also what stops the compiler eliminating the force.
+
+The forcing cost sits inside the number it forces, deliberately. `pp_ms`
+includes the walk over the text `ppExpr` produced, because excluding it would
+report a delaboration cost for text nothing had yet materialized. -/
+private structure Timings where
+  /-- `collectAxioms`, including the sort. -/
+  axNanos    : Nat := 0
+  /-- Axiom names seen, summed over rows. Forces `axs`. -/
+  axCount    : Nat := 0
+  /-- `findDeclarationRanges?`, `isInstance`, `isReducible`, `findDocString?`.
+  Two disjoint windows: the attribute reads before pretty-printing and the
+  doc-string read after it. Summed, because the split is not interesting. -/
+  attrNanos  : Nat := 0
+  /-- Both `ppExpr` calls -- `type_pp` always, `value_pp` for def/opaque. -/
+  ppNanos    : Nat := 0
+  /-- Characters of pretty-printed Lean. Forces the delaboration. -/
+  ppChars    : Nat := 0
+  /-- `localConstsIn` over the type, and over the value for def/opaque. -/
+  depsNanos  : Nat := 0
+  /-- Topic-local dependency edges: the DAG's edge count. Forces the `qsort`. -/
+  depsCount  : Nat := 0
+  /-- The two linear scans over `cites` and `discharges`. O(rows x entries) by
+  shape, which is why it is measured rather than assumed small. -/
+  citesNanos : Nat := 0
+  /-- Cites and discharges attached. Forces both scans. -/
+  citesCount : Nat := 0
+  rows       : Nat := 0
+
+private def Timings.add (a b : Timings) : Timings where
+  axNanos    := a.axNanos + b.axNanos
+  axCount    := a.axCount + b.axCount
+  attrNanos  := a.attrNanos + b.attrNanos
+  ppNanos    := a.ppNanos + b.ppNanos
+  ppChars    := a.ppChars + b.ppChars
+  depsNanos  := a.depsNanos + b.depsNanos
+  depsCount  := a.depsCount + b.depsCount
+  citesNanos := a.citesNanos + b.citesNanos
+  citesCount := a.citesCount + b.citesCount
+  rows       := a.rows + b.rows
+
+/-- Milliseconds, so a report needs no division in the reader's head. -/
+private def msOf (nanos : Nat) : Nat := nanos / 1000000
+
 /-- The module set in scope for one or more library roots: each root module and
 everything below it. A topic monorepo can therefore keep a thin combined
 umbrella while sweeping the declarations owned by each constituent library. -/
@@ -269,14 +329,19 @@ repository's own work is the vacuous pass with extra steps. -/
 private def rowJson (env : Environment) (mods : Std.HashSet Name)
     (cites : Array CitesEntry) (discharges : Array DischargesEntry)
     (n : Name) (modName : Name) (ci : ConstantInfo)
-    (scope : String) : MetaM (Json × Stats) := do
+    (scope : String) : MetaM (Json × Stats × Timings) := do
+  let tAx0 ← IO.monoNanosNow
   -- SORT: `collectAxioms` output order is unspecified and observed unstable.
   let axs := (← collectAxioms n).map (·.toString) |>.qsort (· < ·)
+  -- Demands the map and the sort. See the note on `Timings`.
+  let axCount := axs.size
+  let tAx1 ← IO.monoNanosNow
   let rng ← findDeclarationRanges? n
   let isInt := n.isInternalDetail
   let isInst ← isInstance n
   let isPriv := isPrivateName n
   let isRed ← isReducible n
+  let tAttr1 ← IO.monoNanosNow
   let tyStr ← withOptions (fun _ => ppOpts) do
     pure (toString (← PrettyPrinter.ppExpr ci.type))
   -- `value_pp` for `def` and `opaque` ONLY.
@@ -291,21 +356,30 @@ private def rowJson (env : Environment) (mods : Std.HashSet Name)
       withOptions (fun _ => ppOpts) do
         pure (some (toString (← PrettyPrinter.ppExpr v.value)))
     | _ => pure none
+  -- THE FORCE, and the reason this line is not `utf8ByteSize`.
+  let ppChars := tyStr.length + (valStr.map (·.length)).getD 0
+  let tPp1 ← IO.monoNanosNow
   -- Read from the environment, like everything else here. `findDocString?`
   -- reads the doc-string extension rather than the source file, so a
   -- doc-comment cannot be hidden from this by any syntactic trick -- the
   -- same property that makes the constant sweep immune to
   -- `set_option ... in theorem`.
   let docStr ← findDocString? env n
+  let tDoc1 ← IO.monoNanosNow
   let deps := match ci with
     | .defnInfo v | .opaqueInfo v =>
       sortedNames (localConstsIn env mods ci.type ++ localConstsIn env mods v.value)
     | _ => localConstsIn env mods ci.type
+  -- Demands the `qsort` inside `sortedNames`.
+  let depsCount := deps.size
+  let tDeps1 ← IO.monoNanosNow
   let myCites := cites.filter (·.declName == n)
   -- Sorted and deduplicated, like every other array here: `discharges` is a
   -- digest input for nobody today, but it IS a diff input for every reviewer,
   -- and an unstable order would make a no-op re-emit look like a change.
   let myDischarges := sortedStrings <| (discharges.filter (·.declName == n)).map (·.frontierId)
+  let citesCount := myCites.size + myDischarges.size
+  let tCites1 ← IO.monoNanosNow
   let row := Json.mkObj [
     ("name",         Json.str n.toString),
     ("module",       Json.str modName.toString),
@@ -359,14 +433,25 @@ private def rowJson (env : Environment) (mods : Std.HashSet Name)
                 ("relation_claimed", Json.str c.relation.toString),
                 ("frontier",         Json.arr (c.frontier.map Json.str)),
                 ("note", if c.note.isEmpty then Json.null else Json.str c.note)]))]
-  return (row, { total := 1
-                 inScope   := if isInt || scope == "external" then 0 else 1
-                 internal  := if isInt then 1 else 0
-                 withRange := if rng.isSome then 1 else 0
-                 instances := if isInst then 1 else 0
-                 privateN  := if isPriv then 1 else 0
-                 sorryN    := if axs.contains "sorryAx" then 1 else 0
-                 external  := if scope == "external" then 1 else 0 })
+  return (row,
+    { total := 1
+      inScope   := if isInt || scope == "external" then 0 else 1
+      internal  := if isInt then 1 else 0
+      withRange := if rng.isSome then 1 else 0
+      instances := if isInst then 1 else 0
+      privateN  := if isPriv then 1 else 0
+      sorryN    := if axs.contains "sorryAx" then 1 else 0
+      external  := if scope == "external" then 1 else 0 },
+    { axNanos    := tAx1 - tAx0
+      axCount    := axCount
+      attrNanos  := (tAttr1 - tAx1) + (tDoc1 - tPp1)
+      ppNanos    := tPp1 - tAttr1
+      ppChars    := ppChars
+      depsNanos  := tDeps1 - tDoc1
+      depsCount  := depsCount
+      citesNanos := tCites1 - tDeps1
+      citesCount := citesCount
+      rows       := 1 })
 
 
 /-- Build the `emission/1.0` document over the ambient environment.
@@ -422,6 +507,8 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
   -- silently rather than loudly.
   let mut out : Array (String × Json) := #[]
   let mut st : Stats := {}
+  let mut tm : Timings := {}
+  let tSweep0 ← IO.monoNanosNow
   for n in names do
     let some ci := env.find? n | continue
     let some idx := env.getModuleIdxFor? n | continue
@@ -442,9 +529,10 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
     if !mods.contains modName then
       st := st.add { total := 1, foreign := 1 }
       continue
-    let (row, delta) ← rowJson env mods cites discharges n modName ci "topic"
+    let (row, delta, tdelta) ← rowJson env mods cites discharges n modName ci "topic"
     out := out.push (n.toString, row)
     st := st.add delta
+    tm := tm.add tdelta
   -- `external_decls[]`, from the registry. Emission is module-scoped to the
   -- topic library, correctly, which means `@[cites]` can never be attached to
   -- `Mathlib.…` — so a topic whose paper lemma is ALREADY IN MATHLIB has to
@@ -466,11 +554,34 @@ def emitJsonForRoots (rootLib : Name) (additionalRoots : List Name)
     let some idx := env.getModuleIdxFor? n
       | throwError "mfc-emit: external_decls names {n}, which has no module. \
           Only imported constants may be bound externally."
-    let (row, delta) ← rowJson env mods cites discharges n allMods[idx.toNat]! ci "external"
+    let (row, delta, tdelta) ← rowJson env mods cites discharges n allMods[idx.toNat]! ci "external"
     out := out.push (n.toString, row)
     st := st.add delta
+    tm := tm.add tdelta
+  let tSweep1 ← IO.monoNanosNow
   -- Iteration order over modules and their constant lists is not specified.
   let sortedOut := (out.qsort fun a b => a.1 < b.1).map (·.2)
+  let tSort1 ← IO.monoNanosNow
+  -- One machine-readable line on stderr; `mfc-emit-sweep:` is the grep key.
+  -- Built with `Json.mkObj` rather than string interpolation so the line is
+  -- valid JSON by construction and a consumer never parses a brace by hand.
+  --
+  -- The subtotals do NOT sum to `sweep_ms`. The remainder is loop overhead,
+  -- `Json.mkObj` per row, and the array pushes -- and seeing how large that
+  -- remainder is happens to be the point of reporting both.
+  IO.eprintln s!"mfc-emit-sweep: {(Json.mkObj [
+    ("rows",       Json.num tm.rows),
+    ("sweep_ms",   Json.num (msOf (tSweep1 - tSweep0))),
+    ("sort_ms",    Json.num (msOf (tSort1 - tSweep1))),
+    ("axioms_ms",  Json.num (msOf tm.axNanos)),
+    ("attrs_ms",   Json.num (msOf tm.attrNanos)),
+    ("pp_ms",      Json.num (msOf tm.ppNanos)),
+    ("deps_ms",    Json.num (msOf tm.depsNanos)),
+    ("cites_ms",   Json.num (msOf tm.citesNanos)),
+    ("pp_chars",   Json.num tm.ppChars),
+    ("axiom_refs", Json.num tm.axCount),
+    ("dep_edges",  Json.num tm.depsCount),
+    ("cite_refs",  Json.num tm.citesCount)]).compress}"
   -- `source_git_commit` sits with the other provenance fields, not after
   -- `emitted_at`: `emitted_at` stays the single volatile field so the
   -- two-sweep determinism gate keeps comparing everything else byte-for-byte.
@@ -537,8 +648,13 @@ private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : Li
   -- An emission asserting that a repo cites nothing, produced by the tool
   -- whose entire purpose is to make vacuous passes impossible. The regression
   -- test for this is `mfc_emit_selftest`, which fails if `cites[]` is empty.
+  let tImport0 ← IO.monoNanosNow
   let env ← importModules #[{ module := rootLib }] {}
     (trustLevel := 0) (loadExts := true)
+  -- Demands the import: the header array is materialized from the loaded
+  -- `.olean`s, so this is not a size read off a promise.
+  let modulesLoaded := env.header.moduleNames.size
+  let tImport1 ← IO.monoNanosNow
   let emittedAt ← isoUtcNow
   let sourceGitCommit ← sourceGitCommitNow
   -- `maxHeartbeats := 0`, i.e. unlimited, and it is not laziness.
@@ -561,12 +677,16 @@ private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : Li
     { fileName := "<mfc-emit>", fileMap := default, options := {}
       maxHeartbeats := 0 }
   let coreSt : Core.State := { env }
+  let tEmit0 ← IO.monoNanosNow
   let result ← try
       let ((doc, sorryN), _, _) ←
         (emitJsonForRoots rootLib additionalRoots externals leanOptions
           emittedAt sourceGitCommit).toIO ctx coreSt
       pure (Except.ok (doc, sorryN))
     catch e => pure (Except.error (toString e))
+  -- `emit_ms` covers the sweep as forced by `rowJson`. The document is still a
+  -- tree of `Json` nodes here; rendering it is timed separately below.
+  let tEmit1 ← IO.monoNanosNow
   match result with
   | .error msg =>
     IO.eprintln s!"mfc-emit: {msg}"
@@ -574,7 +694,23 @@ private unsafe def emitToFileForRootsImpl (rootLib : Name) (additionalRoots : Li
   | .ok (doc, sorryN) =>
     if let some parent := outPath.parent then
       IO.FS.createDirAll parent
-    IO.FS.writeFile outPath (doc.pretty 120 ++ "\n")
+    let tRender0 ← IO.monoNanosNow
+    let text := doc.pretty 120 ++ "\n"
+    -- Forces the render. Measured against derived-alg-geo-lean's 38.1 MB
+    -- emission at v4.32.1, `Json.pretty 120` takes 206 ms and `Json.compress`
+    -- 204 ms, so this is not where the sweep's cost hides. It is reported
+    -- rather than assumed, because it was assumed once already.
+    let chars := text.length
+    let tRender1 ← IO.monoNanosNow
+    IO.FS.writeFile outPath text
+    let tWrite1 ← IO.monoNanosNow
+    IO.eprintln s!"mfc-emit-phases: {(Json.mkObj [
+      ("modules",   Json.num modulesLoaded),
+      ("import_ms", Json.num (msOf (tImport1 - tImport0))),
+      ("emit_ms",   Json.num (msOf (tEmit1 - tEmit0))),
+      ("render_ms", Json.num (msOf (tRender1 - tRender0))),
+      ("write_ms",  Json.num (msOf (tWrite1 - tRender1))),
+      ("chars",     Json.num chars)]).compress}"
     IO.eprintln s!"mfc-emit: wrote {outPath}"
     if sorryN != 0 then
       IO.eprintln s!"mfc-emit: {sorryN} constant(s) depend on sorryAx.\n\
