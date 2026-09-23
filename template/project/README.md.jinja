@@ -1,0 +1,25 @@
+# {{ topic_slug }}
+
+This repository was generated from the MathFormalContract Copier template.
+The exact Copier source revision is recorded in .copier-answers.yml; the
+same commit pins the shared contract package in lakefile.toml and
+contract.lock.
+
+Use a 40-hex template commit when creating the repository:
+
+    copier copy gh:chris-dare-dev/math-formal-contract-lean ./{{ topic_slug }} --vcs-ref <40-hex-commit>
+
+After committing the generated repository and keeping its working tree clean,
+run copier update to review template changes. Copier applies updates through
+its tracked answers file; do not edit that file by hand.
+
+## First steps
+
+1. Complete formalization.yaml from source evidence. Keep unknown fields as
+   none or pending.
+2. Replace the placeholder theorem with a real statement and proof.
+3. Create the matching arXMCP notebook, add papers, and ingest the corpus.
+4. Mint a registry id, add source entries, and bind declarations only when the
+   mathematical relation is supported.
+5. Generate the attestations with the commands in CLAUDE.md, review every
+   not_run result, and commit the durable records.

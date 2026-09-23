@@ -1,0 +1,33 @@
+name = "{{ root_namespace }}"
+version = "0.1.0"
+defaultTargets = ["{{ root_namespace }}", "emit"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+{% if anchor %}
+[[require]]
+name = {{ anchor.name | tojson }}
+git = {{ anchor.git | tojson }}
+rev = "{{ anchor.rev }}"
+{% else %}
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "{{ mathlib_rev }}"
+{% endif %}
+
+[[require]]
+name = "MathFormalContract"
+git = "https://github.com/chris-dare-dev/math-formal-contract-lean"
+rev = "{{ _copier_conf.vcs_ref_hash }}"
+
+[[lean_lib]]
+name = "{{ root_namespace }}"
+
+[[lean_exe]]
+name = "emit"
+root = "Emit"
+srcDir = "exe"
+supportInterpreter = true

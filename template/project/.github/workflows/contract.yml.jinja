@@ -1,0 +1,65 @@
+name: contract
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: leanprover/lean-action@v1
+        with:
+          use-mathlib-cache: true
+
+      - name: install mfc
+        run: pip install 'mfc[yaml] @ https://github.com/chris-dare-dev/math-formal-contract-lean/archive/{{ _copier_conf.vcs_ref_hash }}.tar.gz#subdirectory=contract'
+
+      - name: build
+        run: lake build
+
+      - name: emit
+        run: |
+          if [ -f registry/{{ topic_slug }}.yaml ]; then
+            mfc registry external-decls registry/{{ topic_slug }}.yaml --out attest/external-decls.json
+            lake exe emit --externals attest/external-decls.json --out attest/lean-emission.json
+          else
+            lake exe emit --out attest/lean-emission.json
+          fi
+
+      - name: measure environment
+        run: mfc env --repo . --out attest/environment.json --axiom-policy attest/axiom-policy.json --emitter-version mfc-emit/1.0.0
+
+      - name: bundle
+        run: mfc bundle --emission attest/lean-emission.json --environment attest/environment.json --out attest/declarations.json
+
+      - name: lint
+        run: |
+          if [ -f registry/{{ topic_slug }}.yaml ]; then
+            mfc lint --emission attest/lean-emission.json --environment attest/environment.json --registry registry/{{ topic_slug }}.yaml --closed-lanes closed-lanes.json
+          else
+            mfc lint --emission attest/lean-emission.json --environment attest/environment.json --closed-lanes closed-lanes.json
+          fi
+
+      - name: coverage
+        run: mfc check-ilean-coverage --emission attest/lean-emission.json --closed-lanes closed-lanes.json
+
+      - name: registry validation
+        shell: bash
+        run: |
+          shopt -s nullglob
+          found=false
+          for registry in registry/*.yaml registry/*.yml registry/*.json; do
+            [ -f "$registry" ] || continue
+            found=true
+            mfc registry validate "$registry" --frontier-kind-labels{% for label in frontier_kind_labels %} {{ label }}{% endfor %}
+          done
+          if [ "$found" = false ]; then
+            echo "not_run: no registry exists yet"
+          fi
+
+      - name: no hand-edited attestations
+        run: git diff --exit-code --stat attest/declarations.json attest/template-trust.yaml

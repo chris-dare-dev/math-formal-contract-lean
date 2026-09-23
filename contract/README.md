@@ -268,6 +268,11 @@ observations, and deliberately so:
   overridable so a caller without one on PATH supplies what it measured rather
   than receiving a fabricated value.
 
+The Copier template writes a structured policy file and passes it with
+--axiom-policy. That input has allowlist[] and additions[] whose entries use
+{axiom, justification}; the environment records them as {axiom, reason}, the
+field required by environment/1.0.
+
 ### What it says out loud
 
 Run against the consuming repo it reports, correctly and unprompted:
@@ -821,24 +826,35 @@ directory without `--force` — the first thing it would otherwise overwrite is 
 Every pin must be 40-hex. A branch is refused because `lake update` re-resolves
 it, so the pin would stop pinning with nothing in the repo changing to show it.
 
-### Rendered with the standard library, not copier — and when to revisit
+### Topic template: Copier
 
-The architecture note specifies copier, and its `copier update` is the stated
-migration path for a MAJOR schema bump across N topic repos. That is a real
-benefit with, today, **no users**: one topic repo exists and it was not created
-from a template, so there is nothing for `copier update` to update. Against it,
-copier pulls jinja2, pydantic, plumbum and questionary into a package that
-argues its own placement decisions from dependency discipline.
+New maintained topic repositories use the Copier template in the repository's
+template directory. Its generated answers record Copier's exact source commit;
+the same revision pins MathFormalContract in the generated Lake package.
+Creating from a tag or branch is not the supported path: pass a full 40-hex
+commit to Copier so the saved answers file is an exact pin.
 
-So the templates are plain text with `@@TOKEN@@` substitution — over
-`str.format` and `string.Template` because Lean uses both `{}` and `$`, and a
-scaffolder that mangles the file it writes is worse than none. A test asserts
-no rendered file carries a live token, and the renderer refuses rather than
-shipping one.
+    copier copy gh:chris-dare-dev/math-formal-contract-lean ./topic --vcs-ref <40-hex-commit>
+    copier update
 
-**Reversal condition:** adopt copier when a second topic repo exists, *was
-created by this command*, and a MAJOR schema bump is due. These files become
-the template with the tokens rewritten to `{{ }}`.
+Run updates in a clean adopter checkout and review the result before committing
+it. Do not edit .copier-answers.yml by hand. Copier owns that file because its
+answers are the input to the next three-way update.
+
+The template asks for topic and Lean names, the toolchain, an optional anchor,
+the direct Mathlib revision when there is no anchor, the notebook hint, axiom
+policy, closed lanes, module allowlist, forbidden vocabulary, and frontier
+labels. It creates policy files from those answers rather than inserting
+unresolved template tokens into generated artifacts.
+
+Its trust record currently says generalization_validated: false and records
+the date. It stays false until the second-topic gate has been completed and
+reviewed. The generated formalization.yaml leaves unknown source coordinates
+as none or pending.
+
+The earlier mfc init command remains a one-shot local renderer for existing
+workflows. It does not record Copier answers or receive template updates; use
+the Copier template for a maintained topic repository.
 
 ## `registry`: the only hand-authored artifact
 
