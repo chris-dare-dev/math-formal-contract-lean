@@ -23,3 +23,7 @@ its tracked answers file; do not edit that file by hand.
    mathematical relation is supported.
 5. Generate the attestations with the commands in CLAUDE.md, review every
    not_run result, and commit the durable records.
+
+If a paper statement is already a theorem in Mathlib, bind that imported
+constant directly with `external_decls` and `@[cites]`; do not formalize a
+wrapper only to attach the citation.
