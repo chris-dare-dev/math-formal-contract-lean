@@ -1,0 +1,11 @@
+{
+  "allowlist": {{ axiom_policy.allowlist | tojson }},
+  "additions": [
+{% for addition in axiom_policy.additions %}
+    {
+      "axiom": {{ addition.axiom | tojson }},
+      "justification": {{ addition.justification | tojson }}
+    }{% if not loop.last %},{% endif %}
+{% endfor %}
+  ]
+}
