@@ -1,5 +1,5 @@
 _min_copier_version: "9.11.3"
-_subdirectory: project
+_subdirectory: template/project
 
 topic_slug:
   type: str
