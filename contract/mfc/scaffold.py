@@ -1,50 +1,9 @@
-"""`mfc init` — render a topic repository that reaches a green build on run one.
+"""mfc init is a legacy one-shot local renderer.
 
-The measure of this command is not that it produces files. It is that the tree
-it produces **passes the rest of `mfc` immediately**, with no hand-editing. An
-adopter whose first CI run is red learns nothing about their own work, and the
-most likely thing they do next is delete the workflow.
-
-That is a sharper constraint than it looks. `emission-1.0.schema.json` sets
-`constants: minItems 1`, so an emission over zero declarations is not a
-representable artifact — which means **the scaffold must ship a real Lean
-declaration**, not an empty library. `test_the_scaffold_would_survive_its_own_
-emission_schema` is what holds that.
-
-## It does not create a repository
-
-No `git init`, no remote, no first commit. A hand-initialised repository has no
-remote, no CI permissions, no branch protection and no provisioning, and a tool
-that quietly produced one would be handing the adopter something that looks
-finished and is not. `mfc init` renders files into a directory and prints what
-remains to be provisioned, by whatever path owns that tree.
-
-It also refuses to write into a non-empty directory without `--force`, because
-the first thing it would overwrite is a `lakefile.toml` someone wrote.
-
-## Rendered with the standard library, not copier
-
-The architecture note specifies copier, whose `.copier-answers.yml._commit`
-would pin the template by exact commit and whose `copier update` is the stated
-migration path for a MAJOR schema bump across N topic repos.
-
-That is a real benefit with, today, **no users**: one topic repo exists and it
-was not created from a template, so `copier update` has nothing to update. Set
-against it, copier pulls jinja2, pydantic, plumbum and questionary into a
-package whose README argues its own placement decisions from dependency
-discipline, and whose Lake half is the *named exception* to a consuming repo's
-one-pin rule specifically because it is a leaf.
-
-So the templates below are plain text with `@@TOKEN@@` substitution — chosen
-over `str.format` and `string.Template` because Lean uses both `{}` and `$`,
-and over a regex because a scaffolder that mangles the file it writes is worse
-than no scaffolder.
-
-**Reversal condition, so this is a decision rather than a habit:** adopt copier
-when a second topic repo exists *and* was created by this command *and* a MAJOR
-schema bump is due. At that point `copier update` is doing work no one can do
-by hand, and these same files become the template with the tokens rewritten to
-`{{ }}`.
+New maintained topic repositories use template/ and Copier because the generated
+answers file pins the template revision and is the input for future updates.
+This module remains for compatibility with existing local workflows; its
+token renderer is not the reusable template.
 """
 
 from __future__ import annotations

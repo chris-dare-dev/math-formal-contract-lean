@@ -1,0 +1,8 @@
+/.lake/
+__pycache__/
+
+# These are run outputs. Attestations derived from them remain tracked.
+/attest/lean-emission.json
+/attest/environment.json
+/attest/external-decls.json
+/attest/run.json

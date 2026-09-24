@@ -1,0 +1,3 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY.
+{% set answers = _copier_answers | combine({'_commit': _copier_conf.vcs_ref_hash}) -%}
+{{ answers | to_nice_yaml -}}

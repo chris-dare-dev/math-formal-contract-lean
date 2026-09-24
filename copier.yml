@@ -1,0 +1,145 @@
+_min_copier_version: "9.11.3"
+_subdirectory: template/project
+
+topic_slug:
+  type: str
+  help: A lowercase topic and matching arXMCP notebook slug.
+  validator: >-
+    {% if not (topic_slug | regex_search('^[a-z][a-z0-9-]{2,30}$')) %}
+    Use 3–31 lowercase letters, digits, or hyphens; start with a letter.
+    {% endif %}
+
+root_namespace:
+  type: str
+  default: "{{ topic_slug | replace('-', ' ') | title | replace(' ', '') }}"
+  help: The root Lean namespace, in UpperCamelCase.
+  validator: >-
+    {% if not (root_namespace | regex_search('^[A-Z][A-Za-z0-9]*$')) %}
+    Use UpperCamelCase without dots.
+    {% endif %}
+
+lean_toolchain:
+  type: str
+  default: leanprover/lean4:v4.32.1
+  help: An exact Lean toolchain release or nightly identifier.
+  validator: >-
+    {% if not (lean_toolchain | regex_search('^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$')) %}
+    Use a toolchain identifier such as leanprover/lean4:v4.31.0.
+    {% endif %}
+
+anchor:
+  type: yaml
+  default: null
+  multiline: true
+  help: Optional upstream package map with name, git, and an exact 40-hex rev.
+  validator: >-
+    {% if anchor is not none and not (anchor is mapping
+      and anchor.name is defined and anchor.git is defined
+      and anchor.rev is defined
+      and (anchor.name | regex_search('^[A-Za-z][A-Za-z0-9]*$'))
+      and (anchor.git | regex_search('^https://\\S+$'))
+      and (anchor.rev | regex_search('^[0-9a-f]{40}$'))) %}
+    Use null or a map {name: package, git: HTTPS URL, rev: 40-hex commit}.
+    {% endif %}
+
+mathlib_rev:
+  type: str
+  default: ""
+  when: "{{ not anchor }}"
+  help: Required when there is no upstream anchor; pins Mathlib directly.
+  validator: >-
+    {% if not (mathlib_rev | regex_search('^[0-9a-f]{40}$')) %}
+    Without an anchor, give Mathlib's exact 40-hex commit.
+    {% endif %}
+
+notebook_hint:
+  type: str
+  default: "{{ topic_slug }}"
+  help: The matching arXMCP notebook slug, stored as a hint rather than an identity.
+  validator: >-
+    {% if not (notebook_hint | regex_search('^[a-z][a-z0-9-]{2,30}$')) %}
+    Use 3–31 lowercase letters, digits, or hyphens; start with a letter.
+    {% endif %}
+
+axiom_policy:
+  type: yaml
+  multiline: true
+  default:
+    allowlist:
+      - propext
+      - Classical.choice
+      - Quot.sound
+    additions: []
+  help: Explicit axiom allowlist and any additions with reasons.
+  validator: >-
+    {% if not (axiom_policy is mapping and axiom_policy.allowlist is defined
+      and axiom_policy.additions is defined
+      and axiom_policy.allowlist is sequence and axiom_policy.allowlist is not string
+      and axiom_policy.additions is sequence and axiom_policy.additions is not string) %}
+    Supply allowlist[] and additions[].
+    {% else %}
+    {% for name in axiom_policy.allowlist %}
+    {% if name is not string %}
+    Every allowlist item must be a string.
+    {% endif %}
+    {% endfor %}
+    {% for item in axiom_policy.additions %}
+    {% if not (item is mapping and item.axiom is defined
+      and item.justification is defined and item.axiom is string
+      and item.justification is string) %}
+    Each addition needs axiom and justification.
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
+closed_lanes:
+  type: yaml
+  multiline: true
+  default: []
+  help: Closed topic lanes with forbidden module prefixes and constants.
+  validator: >-
+    {% for lane in closed_lanes %}
+    {% if not (lane is mapping and lane.name is defined
+      and lane.forbidden_module_prefixes is defined
+      and lane.forbidden_constants is defined
+      and lane.forbidden_module_prefixes is sequence
+      and lane.forbidden_module_prefixes is not string
+      and lane.forbidden_constants is sequence
+      and lane.forbidden_constants is not string) %}
+    Each closed lane needs name, forbidden_module_prefixes, and forbidden_constants.
+    {% endif %}
+    {% endfor %}
+
+permitted_module_prefixes:
+  type: yaml
+  multiline: true
+  default:
+    - Init.
+    - Std.
+    - Lean.
+  help: Positive allowlist of dependency module prefixes.
+
+forbidden_vocabulary:
+  type: yaml
+  multiline: true
+  default: []
+  help: Terms that must not be claimed for declarations in closed lanes.
+  validator: >-
+    {% if forbidden_vocabulary is not sequence or forbidden_vocabulary is string %}
+    Supply a list of strings.
+    {% endif %}
+
+frontier_kind_labels:
+  type: yaml
+  multiline: true
+  default: []
+  help: This topic's allowed frontier labels for registry validation.
+  validator: >-
+    {% if frontier_kind_labels is not sequence or frontier_kind_labels is string %}
+    Supply a list of lowercase slugs.
+    {% endif %}
+    {% for label in frontier_kind_labels %}
+    {% if not (label | regex_search('^[a-z][a-z0-9-]{0,31}$')) %}
+    Frontier labels must be lowercase slugs.
+    {% endif %}
+    {% endfor %}

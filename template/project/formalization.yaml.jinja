@@ -1,0 +1,42 @@
+# Unfillable values stay none or pending. Do not substitute plausible guesses.
+topic: {{ topic_slug }}
+notebook_hint: {{ notebook_hint }}
+lean_library: {{ root_namespace }}
+bootstrap: true
+
+source:
+  scheme: pending
+  identifier: none
+  version: none
+
+{% if anchor %}
+anchor:
+  name: {{ anchor.name | tojson }}
+  git: {{ anchor.git | tojson }}
+  rev: {{ anchor.rev }}
+{% else %}
+anchor: none
+{% endif %}
+
+axiom_policy:
+  allowlist: {{ axiom_policy.allowlist | tojson }}
+  additions:
+{% if axiom_policy.additions %}
+{% for addition in axiom_policy.additions %}
+    - axiom: {{ addition.axiom | tojson }}
+      justification: {{ addition.justification | tojson }}
+{% endfor %}
+{% else %}
+    []
+{% endif %}
+
+closed_lanes: {{ closed_lanes | tojson }}
+permitted_module_prefixes: {{ permitted_module_prefixes | tojson }}
+forbidden_vocabulary: {{ forbidden_vocabulary | tojson }}
+frontier_kind_labels: {{ frontier_kind_labels | tojson }}
+
+status:
+  sorry_count: 0
+  builds_clean: pending
+  human_review: none
+  machine_review: pending

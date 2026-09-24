@@ -1,0 +1,15 @@
+{
+  "$comment": "Topic policy generated from the Copier answers. An empty list means no closed lane has been declared.",
+  "permitted_module_prefixes": {{ permitted_module_prefixes | tojson }},
+  "closed_lanes": [
+{% for lane in closed_lanes %}
+    {
+      "name": {{ lane.name | tojson }},
+      "forbidden_module_prefixes": {{ lane.forbidden_module_prefixes | default([]) | tojson }},
+      "forbidden_constants": {{ lane.forbidden_constants | default([]) | tojson }},
+      "forbidden_vocabulary": {{ forbidden_vocabulary | tojson }},
+      "note": {{ lane.note | default("") | tojson }}
+    }{% if not loop.last %},{% endif %}
+{% endfor %}
+  ]
+}

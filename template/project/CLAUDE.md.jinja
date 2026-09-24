@@ -1,0 +1,58 @@
+# {{ root_namespace }} working agreements
+
+## 1. The topmost pin is exact
+
+This repository has one topmost pinned mathematical package: the optional
+anchor when one is supplied, or Mathlib directly when there is no anchor.
+Without an anchor, Mathlib is required directly at the exact revision in
+lakefile.toml. With an anchor, do not add a second independent Mathlib pin.
+Never use a branch where a 40-hex commit belongs.
+
+MathFormalContract is a named leaf dependency pinned to the same exact commit
+recorded in .copier-answers.yml. It has no transitive Lake dependencies.
+
+## 2. No sorry and no new axioms by convenience
+
+A declaration that does not exist is an honest gap. A sorry-backed statement
+is a false claim in a repository whose purpose is to be trusted. If a proof
+needs a fact this environment cannot supply, record the frontier and stop.
+
+## 3. Closed lanes are explicit
+
+closed-lanes.json holds the positive module allowlist and each declared
+closed lane. forbidden_vocabulary is checked against declarations associated
+with an open frontier. Do not claim a closed lane merely because it is hard.
+
+## 4. formalization.yaml is a claim
+
+Every value is read by machines or by people deciding whether to trust this
+repository. Unknown source coordinates stay none or pending. The bootstrap
+flag is write-once and is cleared by mfc lint after the first in-scope
+declaration appears.
+
+## 5. Bind upstream theorems directly
+
+When a source statement already has an exact Mathlib or anchor theorem, add its
+fully qualified name under that registry entry's `external_decls`, with the
+current `env_digest` from `attest/environment.json`. In a topic module, attach
+the citation to that imported theorem:
+
+    attribute [cites "stmt:<registry-id>:<entry-id>" (relation := exact)] Mathlib.Name
+
+Do not add a local wrapper just to carry the citation. The generated CI step
+turns the registry's external names into the emitter input, which produces
+`scope: external` rows without counting them as topic declarations. Keep an
+exact claim's frontier empty.
+
+## Build and contract checks
+
+    lake build
+    lake exe emit --out attest/lean-emission.json
+    mfc env --repo . --out attest/environment.json --axiom-policy attest/axiom-policy.json --emitter-version mfc-emit/1.1.0
+    mfc bundle --emission attest/lean-emission.json --environment attest/environment.json --out attest/declarations.json
+    mfc lint --emission attest/lean-emission.json --environment attest/environment.json --closed-lanes closed-lanes.json
+    mfc check-ilean-coverage --emission attest/lean-emission.json --closed-lanes closed-lanes.json
+
+The repository CI also validates every registry with the configured
+frontier_kind_labels. A green run with not_run rules has not checked those
+claims; resolve the missing evidence rather than reading the run as a pass.

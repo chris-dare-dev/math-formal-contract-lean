@@ -725,9 +725,43 @@ def cmd_env(args: argparse.Namespace) -> int:
         print(f"error: no such repository: {repo}", file=sys.stderr)
         return EXIT_USAGE
 
-    allowlist = [a.strip() for a in args.axiom_allowlist.split(",") if a.strip()]
+    additions = []
+    if args.axiom_policy:
+        try:
+            policy = load_artifact(Path(args.axiom_policy))
+        except (LoadError, OSError) as exc:
+            print(f"error: could not read axiom policy: {exc}", file=sys.stderr)
+            return EXIT_USAGE
+        if not isinstance(policy, dict) or set(policy) != {"allowlist", "additions"}:
+            print("error: axiom policy must contain exactly allowlist[] and "
+                  "additions[]", file=sys.stderr)
+            return EXIT_USAGE
+        raw_allowlist = policy.get("allowlist")
+        raw_additions = policy.get("additions")
+        if (not isinstance(raw_allowlist, list)
+                or any(not isinstance(item, str) for item in raw_allowlist)
+                or not isinstance(raw_additions, list)):
+            print("error: axiom policy allowlist and additions must be arrays",
+                  file=sys.stderr)
+            return EXIT_USAGE
+        allowlist = [item.strip() for item in raw_allowlist if item.strip()]
+        for index, item in enumerate(raw_additions):
+            if (not isinstance(item, dict)
+                    or set(item) != {"axiom", "justification"}
+                    or not isinstance(item.get("axiom"), str)
+                    or not isinstance(item.get("justification"), str)):
+                print(f"error: axiom policy additions[{index}] must contain "
+                      "string axiom and justification fields", file=sys.stderr)
+                return EXIT_USAGE
+            additions.append({
+                "axiom": item["axiom"],
+                "reason": item["justification"],
+            })
+    else:
+        allowlist = [a.strip() for a in args.axiom_allowlist.split(",") if a.strip()]
+
     if not allowlist:
-        print("error: --axiom-allowlist is empty; an empty allowlist permits "
+        print("error: axiom allowlist is empty; an empty allowlist permits "
               "nothing and is never what a caller means", file=sys.stderr)
         return EXIT_USAGE
 
@@ -735,6 +769,7 @@ def cmd_env(args: argparse.Namespace) -> int:
         doc = env_build(
             repo,
             allowlist=allowlist,
+            additions=additions,
             contract_package=args.contract_package,
             lean_githash=args.lean_githash,
             lake_version=args.lake_version,
@@ -1428,8 +1463,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     envp.add_argument("--repo", required=True, help="topic repository checkout")
     envp.add_argument("--out", required=True, help="where to write environment.json")
-    envp.add_argument("--axiom-allowlist", dest="axiom_allowlist", required=True,
-                      help="comma-separated, e.g. propext,Quot.sound,Classical.choice")
+    axiom = envp.add_mutually_exclusive_group(required=True)
+    axiom.add_argument("--axiom-allowlist", dest="axiom_allowlist",
+                       help="comma-separated, e.g. propext,Quot.sound,Classical.choice")
+    axiom.add_argument("--axiom-policy", dest="axiom_policy",
+                       help="JSON or YAML with allowlist[] and additions[]; "
+                            "justification is recorded as the environment reason")
     envp.add_argument("--emitter-version", dest="emitter_version", required=True,
                       help="version of the Lean emitter that produced the "
                            "emission; this tool cannot observe it")
@@ -1470,7 +1509,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ini = sub.add_parser(
         "init",
-        help="render a topic repository that reaches a green build on run one",
+        help="legacy one-shot local renderer; use Copier for maintained topics",
         description="Renders files and NOTHING else: no git init, no remote, no "
                     "commit. Every pin must be a 40-hex commit; branches are "
                     "refused because `lake update` re-resolves them.",
