@@ -1,4 +1,6 @@
 schema: math-formal-contract-template-trust/v1
-recorded_at: 2026-09-23
-generalization_validated: false
-evidence: []
+recorded_at: 2026-09-24
+generalization_validated: true
+evidence:
+  - "analytic-nt adopter commit 7e80b4914ccc463e3054ddd7ba87f76ebab48f2a; Copier template and MathFormalContract pinned at 6f20f1800e84489867c0408a4a2d962d20df2d68; arXiv 1202.3670v4 fetched and ingested; five registry entries validated (13 passed); environment digest 91b38d5f6004a80b60d07b7ee36ac4095993e533a3f681430c3e6b4d3158c30d binds Nat.infinite_setOf_prime as scope: external, relation_claimed: exact; Lean build passed; bundle: 3 declarations (2 topic, 1 cited); lint: 11 passed, 0 failed, E-11 not_run because forbidden_vocabulary is empty; coverage: 6 passed, 0 missing; Copier update and MFC contract suite (632 passed, 3 skipped) passed."
+  - "The Iwaniec–Kowalski digest-only entry fingerprints publisher contents metadata only (chapter 2, page 31); it does not claim inspection of textbook theorem text."

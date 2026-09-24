@@ -847,10 +847,12 @@ policy, closed lanes, module allowlist, forbidden vocabulary, and frontier
 labels. It creates policy files from those answers rather than inserting
 unresolved template tokens into generated artifacts.
 
-Its trust record currently says generalization_validated: false and records
-the date. It stays false until the second-topic gate has been completed and
-reviewed. The generated formalization.yaml leaves unknown source coordinates
-as none or pending.
+The template's own `template/trust.yaml` records
+`generalization_validated: true` with dated evidence from the completed
+analytic-number-theory gate. Each new generated topic still starts with
+`attest/template-trust.yaml` set to false; that topic changes its own record
+only after its evidence passes. The generated `formalization.yaml` leaves
+unknown source coordinates as none or pending.
 
 The earlier mfc init command remains a one-shot local renderer for existing
 workflows. It does not record Copier answers or receive template updates; use
