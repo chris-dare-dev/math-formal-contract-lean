@@ -254,7 +254,7 @@ meant to pin what the measurement was made in was describing a different machine
 ```bash
 mfc env --repo ../topic-repo --out attest/environment.json \
         --axiom-allowlist propext,Quot.sound,Classical.choice \
-        --emitter-version mfc-emit/1.0.0
+        --emitter-version mfc-emit/1.1.0
 ```
 
 Every field is read out of the checkout — `lean-toolchain`,

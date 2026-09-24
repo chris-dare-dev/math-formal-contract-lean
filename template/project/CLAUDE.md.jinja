@@ -48,7 +48,7 @@ exact claim's frontier empty.
 
     lake build
     lake exe emit --out attest/lean-emission.json
-    mfc env --repo . --out attest/environment.json --axiom-policy attest/axiom-policy.json --emitter-version mfc-emit/1.0.0
+    mfc env --repo . --out attest/environment.json --axiom-policy attest/axiom-policy.json --emitter-version mfc-emit/1.1.0
     mfc bundle --emission attest/lean-emission.json --environment attest/environment.json --out attest/declarations.json
     mfc lint --emission attest/lean-emission.json --environment attest/environment.json --closed-lanes closed-lanes.json
     mfc check-ilean-coverage --emission attest/lean-emission.json --closed-lanes closed-lanes.json

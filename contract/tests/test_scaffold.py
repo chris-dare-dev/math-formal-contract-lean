@@ -160,6 +160,21 @@ def test_the_copier_emitter_template_qualifies_lean_name_constructor() -> None:
     assert "Lean.Name.mkSimple" in emitter
 
 
+def test_copier_docs_use_the_emitter_version_written_by_lean() -> None:
+    """Environment records must identify the emitter that made the emission."""
+    current_version = 'Json.str "mfc-emit/1.1.0"'
+    assert current_version in (REPO / "MathFormalContract" / "Emit.lean").read_text(
+        encoding="utf-8"
+    )
+    for relative in (
+        "template/project/.github/workflows/contract.yml.jinja",
+        "template/project/CLAUDE.md.jinja",
+        "contract/README.md",
+    ):
+        source = (REPO / relative).read_text(encoding="utf-8")
+        assert "--emitter-version mfc-emit/1.1.0" in source
+
+
 def test_the_emitter_exe_sets_support_interpreter() -> None:
     """Omitting it fails ONLY on Linux; it would pass every local check."""
     assert "supportInterpreter = true" in render(_answers())["lakefile.toml"]

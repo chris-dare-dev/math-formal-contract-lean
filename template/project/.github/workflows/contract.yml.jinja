@@ -31,7 +31,7 @@ jobs:
           fi
 
       - name: measure environment
-        run: mfc env --repo . --out attest/environment.json --axiom-policy attest/axiom-policy.json --emitter-version mfc-emit/1.0.0
+        run: mfc env --repo . --out attest/environment.json --axiom-policy attest/axiom-policy.json --emitter-version mfc-emit/1.1.0
 
       - name: bundle
         run: mfc bundle --emission attest/lean-emission.json --environment attest/environment.json --out attest/declarations.json
