@@ -1,8 +1,9 @@
+import Lean
 import MathFormalContract
 
 def main (args : List String) : IO UInt32 :=
   MathFormalContract.emitMain
-    (rootLib := Name.mkSimple "{{ root_namespace }}")
+    (rootLib := Lean.Name.mkSimple "{{ root_namespace }}")
     (leanOptions := [("autoImplicit", .bool false),
                      ("relaxedAutoImplicit", .bool false)])
     args

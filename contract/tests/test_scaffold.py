@@ -149,6 +149,15 @@ def test_the_emitter_exe_declares_the_lakefiles_lean_options() -> None:
     for option in ("autoImplicit", "relaxedAutoImplicit"):
         assert option in files["lakefile.toml"]
         assert option in files["exe/Emit.lean"]
+    assert "rootLib := `AnalyticNT" in files["exe/Emit.lean"]
+
+
+def test_the_copier_emitter_template_qualifies_lean_name_constructor() -> None:
+    """The Copier path uses a constructor, unlike the Python scaffold renderer."""
+    source = REPO / "template" / "project" / "exe" / "Emit.lean.jinja"
+    emitter = source.read_text(encoding="utf-8")
+    assert "import Lean" in emitter
+    assert "Lean.Name.mkSimple" in emitter
 
 
 def test_the_emitter_exe_sets_support_interpreter() -> None:
