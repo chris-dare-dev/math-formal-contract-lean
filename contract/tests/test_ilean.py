@@ -147,7 +147,8 @@ def test_the_empty_repository_says_nothing_was_checked() -> None:
     modules = [_module("Topic")]
     results = ilean_check(_emission([], modules=["Topic"]), modules)
     i02 = next(r for r in results if r.rule == "I-02")
-    assert "BOTH are empty" in i02.reason
+    assert "No topic-scoped constants" in i02.reason
+    assert "in-scope module(s) carry no declarations" in i02.reason
     assert "nothing has been checked" in i02.reason
 
 
@@ -278,16 +279,16 @@ def test_cli_exits_usage_when_nothing_was_built(tmp_path: Path) -> None:
                  "--build-dir", str(tmp_path / "empty")]) == EXIT_USAGE
 
 
-def test_the_cli_never_reaches_the_empty_case_because_the_schema_bars_it(
+def test_the_cli_rejects_an_empty_constants_array_before_i02(
         tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """The bootstrap is solved a level up, by the schema, not by this rule.
+    """The schema rejects a zero-row emission before I-02 can run.
 
     `emission-1.0.schema.json` sets `constants: minItems 1`, so an empty
-    emission is not a representable artifact. Every subcommand validates before
-    it reads, so `I-02`'s both-empty branch is defence in depth for a library
-    caller and is unreachable through `mfc`. Asserted rather than assumed,
-    because a later relaxation of the schema would silently change which
-    mechanism is doing the work.
+    constants array is not a representable artifact. Every subcommand validates
+    before it reads, so this exact shape is rejected before I-02. External-only
+    rows can still leave I-02's filtered `names` empty; this test pins the
+    zero-row validation boundary without claiming that every filtered-empty
+    case is unreachable through the CLI.
     """
     build = _tree(tmp_path, [_module("Topic")])
     p = tmp_path / "emission.json"

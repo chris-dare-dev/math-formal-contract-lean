@@ -233,15 +233,18 @@ def check(emission: dict, modules: list[Module], *,
     # I-02 -- the vacuous pass. Empty emission over a non-empty build.
     if not names and built:
         add("I-02", "the emission is not empty over a non-empty build",
-            [Finding("I-02", "constants[]",
-                     f"empty, while {len(in_scope)} in-scope module(s) carry "
+            [Finding("I-02", "constants[scope=topic]",
+                     f"no topic-scoped constants, while {len(in_scope)} "
+                     f"in-scope module(s) carry "
                      f"{len(built)} declaration(s). This is a mis-scoped "
                      f"emitter, not a clean build")])
     elif not names and not built:
-        # The bootstrap. Consistent, so it passes -- loudly.
+        # `constants: []` fails CLI schema validation before I-02. External-only
+        # rows can still leave `names` empty, so this is the no-in-scope-data
+        # case, including for callers that invoke check() without validation.
         add("I-02", "the emission is not empty over a non-empty build", [],
-            reason=f"BOTH are empty: {len(in_scope)} in-scope module(s) carry no "
-                   f"declarations and neither does the emission. Consistent, and "
+            reason=f"No topic-scoped constants; {len(in_scope)} in-scope module(s) "
+                   f"carry no declarations. Consistent, and "
                    f"this is what a repository's first build looks like -- but "
                    f"nothing has been checked because there is nothing to check")
     else:
