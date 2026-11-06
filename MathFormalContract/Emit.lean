@@ -186,7 +186,7 @@ def sourceGitCommitNow : IO (Option String) := do
   try
     let out ← IO.Process.output { cmd := "git", args := #["rev-parse", "HEAD"] }
     if out.exitCode != 0 then return none
-    let s := out.stdout.trim
+    let s := out.stdout.trimAscii.copy
     if s.length == 40 && s.toList.all (fun c => c.isDigit || ('a' ≤ c && c ≤ 'f')) then
       return some s
     return none
